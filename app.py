@@ -187,7 +187,12 @@ if uploaded:
         "Groq API key", type="password", help="Get a free key at console.groq.com"
     )
 
-    if st.button("Run analysis", type="primary", disabled=not groq_key):
+    if "analyzing" not in st.session_state:
+        st.session_state.analyzing = False
+
+    if st.button("Run analysis", type="primary",
+                 disabled=not groq_key or st.session_state.analyzing):
+        st.session_state.analyzing = True
         if groq_key:
             os.environ["GROQ_API_KEY"] = groq_key
 
@@ -195,12 +200,15 @@ if uploaded:
             features = extract_all(df, is_group)
             sampled = sample(df, features)
 
-        with st.spinner(f"Analyzing {len(sampled)} representative messages with Gemini..."):
+        with st.spinner(f"Analyzing {len(sampled)} representative messages with Groq..."):
             try:
                 result = analyze(features, sampled)
             except Exception as e:
+                st.session_state.analyzing = False
                 st.error(f"Analysis failed: {e}")
                 st.stop()
+
+        st.session_state.analyzing = False
 
         st.success("Done")
         st.divider()

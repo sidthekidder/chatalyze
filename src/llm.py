@@ -23,7 +23,7 @@ def analyze(features: dict, sampled_messages: list[dict]) -> dict:
     for attempt in range(3):
         try:
             response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="openai/gpt-oss-120b",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
                 max_tokens=4096,
@@ -116,11 +116,21 @@ def _parse_response(text: str) -> dict:
 
     analysis = {}
     if analysis_match:
+        raw = analysis_match.group(1).strip()
+        # strip markdown code fences the LLM sometimes wraps around JSON
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
         try:
-            analysis = json.loads(analysis_match.group(1).strip())
+            analysis = json.loads(raw)
         except json.JSONDecodeError:
-            analysis = {"raw": analysis_match.group(1).strip()}
+            analysis = {"raw": raw}
 
-    report = report_match.group(1).strip() if report_match else text
+    report = ""
+    if report_match:
+        report = report_match.group(1).strip()
+        # strip leading bold/header lines the LLM sometimes adds
+        report = re.sub(r"^\*\*[^*]+\*\*\s*\n?", "", report).strip()
+    else:
+        report = text
 
     return {"analysis": analysis, "report": report}
