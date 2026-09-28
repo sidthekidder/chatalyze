@@ -33,11 +33,11 @@ def save_report(result: dict, features: dict) -> Optional[str]:
     rid = str(uuid.uuid4())
     payload = json.dumps({"result": result, "features": features})
 
-    # Upstash REST: POST /set/{key} with body [value, "EX", ttl]
+    # Upstash pipeline: unambiguous format for SET key value EX ttl
     resp = requests.post(
-        f"{url}/set/{rid}",
+        f"{url}/pipeline",
         headers={**headers, "Content-Type": "application/json"},
-        json=[payload, "EX", _REPORT_TTL_SECONDS],
+        json=[["SET", rid, payload, "EX", _REPORT_TTL_SECONDS]],
     )
     if resp.ok:
         return rid
@@ -62,5 +62,5 @@ def load_report(report_id: str) -> Optional[tuple[dict, dict]]:
     try:
         d = json.loads(raw)
         return d["result"], d["features"]
-    except (json.JSONDecodeError, KeyError):
+    except (json.JSONDecodeError, KeyError, TypeError):
         return None
