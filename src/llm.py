@@ -131,30 +131,45 @@ Respond in this exact format:
 def _parse_response(text: str) -> dict:
     import re
 
-    # Extract analysis block — between <analysis> and </analysis>
+    # Extract analysis block
     analysis = {}
     analysis_match = re.search(r"<analysis>(.*?)</analysis>", text, re.DOTALL)
     if analysis_match:
         raw = analysis_match.group(1).strip()
-        raw = re.sub(r"^```(?:json)?\s*", "", raw)
-        raw = re.sub(r"\s*```$", "", raw)
+        # Strip code fences (```json ... ```) that some models add
+        raw = re.sub(r"^```(?:json)?\s*\n?", "", raw, flags=re.MULTILINE)
+        raw = re.sub(r"\n?```\s*$", "", raw, flags=re.MULTILINE)
+        raw = raw.strip()
         try:
             analysis = json.loads(raw)
         except json.JSONDecodeError:
-            analysis = {}
+            # Try once more after stripping any trailing commas (common LLM mistake)
+            raw_fixed = re.sub(r",\s*([}\]])", r"\1", raw)
+            try:
+                analysis = json.loads(raw_fixed)
+            except json.JSONDecodeError:
+                analysis = {}
 
-    # Extract report block — everything after <report>, closing tag optional
+    # Extract report block — prefer explicit <report> tags
     report = ""
     report_match = re.search(r"<report>(.*?)(?:</report>|$)", text, re.DOTALL)
     if report_match:
         report = report_match.group(1).strip()
-        # Strip only generic header lines like "**Coaching Report**" or "**Analysis**"
-        # but keep person name headings — only strip if it's the sole content of the first line
-        # and matches known generic titles
-        report = re.sub(r"^\*\*(Coaching Report|Personal Coaching Report|Analysis Report|Report)\*\*\s*\n?", "", report, flags=re.IGNORECASE).strip()
 
-    # Fallback: if neither tag found, use full text as report
+    # Fallback: grab everything after </analysis> if no <report> tag
+    if not report:
+        after_match = re.search(r"</analysis>(.*?)$", text, re.DOTALL)
+        if after_match:
+            report = after_match.group(1).strip()
+
+    # Last resort: full text (only if analysis also failed — avoids dumping JSON as report)
     if not report and not analysis:
         report = text.strip()
+
+    # Strip generic title headers (but not person names)
+    report = re.sub(
+        r"^\*\*(Coaching Report|Personal Coaching Report|Analysis Report|Report)\*\*\s*\n?",
+        "", report, flags=re.IGNORECASE
+    ).strip()
 
     return {"analysis": analysis, "report": report}
