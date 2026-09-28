@@ -121,6 +121,143 @@ def _build_html_report(features: dict, result: dict) -> str:
 </html>"""
 
 
+def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> None:
+    import plotly.express as px
+
+    if not is_shared:
+        st.success("Done")
+    st.divider()
+
+    patterns = result["analysis"].get("patterns", [])
+    if patterns:
+        st.subheader("Patterns identified")
+        for p in patterns:
+            with st.expander(f"**{p.get('person', '?')}** — {p.get('type', '')}"):
+                if p.get("evidence"):
+                    st.markdown(f"> *\"{p['evidence']}\"*")
+                if p.get("significance"):
+                    st.markdown(p["significance"])
+
+    dynamics = result["analysis"].get("dynamics", {})
+    if dynamics:
+        st.subheader("Relationship dynamics")
+        cols = st.columns(3)
+        if dynamics.get("power_balance"):
+            cols[0].markdown(f"**Balance**\n\n{dynamics['power_balance']}")
+        if dynamics.get("emotional_labor"):
+            cols[1].markdown(f"**Emotional labor**\n\n{dynamics['emotional_labor']}")
+        if dynamics.get("trajectory"):
+            cols[2].markdown(f"**Trajectory**\n\n{dynamics['trajectory']}")
+
+    dyn = features.get("dynamics", {})
+    lor = dyn.get("left_on_read", {})
+    dbl = dyn.get("double_texts", {})
+    ini = dyn.get("conversation_initiations", {})
+    if lor or dbl or ini:
+        st.subheader("Behavioural patterns")
+        stat_senders = features["senders"][:6]
+        bcols = st.columns(len(stat_senders))
+        for i, s in enumerate(stat_senders):
+            bcols[i].markdown(f"**{s}**")
+            bcols[i].markdown(
+                f"Left on read: **{lor.get(s, 0)}×**  \n"
+                f"Double-texts sent: **{dbl.get(s, 0)}×**  \n"
+                f"Started conversations: **{ini.get(s, 0)}×**"
+            )
+
+    trajectory = features.get("trajectory", [])
+    if len(trajectory) >= 3:
+        st.divider()
+        st.subheader("Conversation over time")
+        traj_senders = features["senders"]
+        share_data = {"Period": [b["label"] for b in trajectory]}
+        distortion_data = {"Period": [b["label"] for b in trajectory]}
+        for s in traj_senders:
+            share_data[s] = [b["per_person"].get(s, {}).get("message_share_pct", 0) for b in trajectory]
+            distortion_data[s] = [b["per_person"].get(s, {}).get("distortion_signals", 0) for b in trajectory]
+        share_df = pd.DataFrame(share_data).melt("Period", var_name="Person", value_name="Share %")
+        dist_df = pd.DataFrame(distortion_data).melt("Period", var_name="Person", value_name="Distortion signals")
+        col1, col2 = st.columns(2)
+        with col1:
+            fig = px.line(share_df, x="Period", y="Share %", color="Person",
+                          title="Message share over time", markers=True, height=280)
+            fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", legend_title="")
+            st.plotly_chart(fig, width="stretch")
+        with col2:
+            fig = px.bar(dist_df, x="Period", y="Distortion signals", color="Person",
+                         title="Distortion signals over time", barmode="group", height=280)
+            fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", legend_title="")
+            st.plotly_chart(fig, width="stretch")
+
+    accommodation = features.get("accommodation")
+    if accommodation:
+        st.divider()
+        st.subheader("Language accommodation")
+        score = accommodation["overall_score"]
+        trend = accommodation.get("trend", [])
+        c1, c2 = st.columns([1, 3])
+        c1.metric("Alignment score", f"{score:.0%}",
+                  help="How similar your function-word usage is. Higher = more linguistic mirroring.")
+        c1.caption(accommodation["interpretation"])
+        if len(trend) >= 3:
+            trend_df = pd.DataFrame(trend)
+            fig = px.line(trend_df, x="label", y="score", markers=True,
+                          title="Linguistic alignment over time", height=250,
+                          labels={"label": "", "score": "Alignment"})
+            fig.update_yaxes(range=[0, 1])
+            fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+            c2.plotly_chart(fig, width="stretch")
+
+    group_data = features.get("group", {})
+    if group_data:
+        cohesion = group_data.get("cohesion", {})
+        topic_own = group_data.get("topic_ownership", {})
+        subgroups = group_data.get("subgroups", [])
+        if cohesion:
+            st.divider()
+            st.subheader("Group health")
+            gc1, gc2, gc3 = st.columns(3)
+            gc1.metric("Cohesion score", f"{cohesion['overall_cohesion']:.0%}")
+            gc2.metric("Participation balance", f"{cohesion['participation_balance']:.0%}",
+                       help="How evenly messages are distributed across members")
+            gc3.metric("Reply ratio", f"{cohesion['reply_ratio']:.0%}",
+                       help="Fraction of messages that get a quick reply")
+            st.caption(cohesion["interpretation"])
+        if topic_own:
+            st.subheader("Topic ownership")
+            st.caption("Who sends messages that get a quick reply vs go unanswered")
+            to_df = pd.DataFrame([{"Person": s, **v} for s, v in topic_own.items()])
+            fig = px.bar(to_df, x="Person", y="traction_rate_pct",
+                         title="% of messages replied to within 5 min",
+                         labels={"traction_rate_pct": "Traction rate %"}, height=260)
+            fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+            st.plotly_chart(fig, width="stretch")
+        if subgroups and len(subgroups) > 1:
+            st.subheader("Subgroups detected")
+            for sg in subgroups:
+                label = "Tight cluster" if len(sg) > 1 else "Peripheral"
+                st.markdown(f"**{label}**: {', '.join(sg)}")
+
+    st.divider()
+    st.subheader("Coaching report")
+    st.markdown(result["report"])
+
+    if not is_shared:
+        st.divider()
+        if st.button("🔗 Share report", type="primary"):
+            with st.spinner("Saving…"):
+                rid = save_report(result, features)
+            if rid:
+                share_url = f"{APP_URL}?r={rid}"
+                st.success("Report saved — share this link:")
+                st.code(share_url, language=None)
+            else:
+                st.warning("Sharing requires UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN to be set.")
+
+    with st.expander("Raw statistics"):
+        st.json(features)
+
+
 # --- App ---
 
 st.set_page_config(
@@ -132,7 +269,7 @@ st.set_page_config(
 st.title("Chatalyze")
 st.caption("Your words are a mirror. Most people never look.")
 
-# --- Shared report loader ---
+# --- Shared report (standalone view, no upload form) ---
 _shared_id = st.query_params.get("r")
 if _shared_id:
     st.divider()
@@ -140,12 +277,15 @@ if _shared_id:
         _loaded = load_report(_shared_id)
     if _loaded:
         _result, _features = _loaded
-        st.success(f"Shared report — {_features['date_range']['days']} days · {_features['total_messages']:,} messages")
-        st.session_state.result = _result
-        st.session_state.features = _features
+        st.caption(
+            f"Shared report · {_features['date_range']['days']} days · "
+            f"{_features['total_messages']:,} messages · "
+            f"{', '.join(_features['senders'])}"
+        )
+        _render_analysis(_result, _features, is_shared=True)
     else:
-        st.error("Report not found or sharing not configured.")
-    # Fall through to render section below (session_state will handle display)
+        st.error("Report not found or the link has expired.")
+    st.stop()
 
 st.divider()
 
@@ -232,147 +372,4 @@ if uploaded:
         st.session_state.features = features
 
     if "result" in st.session_state and "features" in st.session_state:
-        result = st.session_state.result
-        features = st.session_state.features
-
-        st.success("Done")
-        st.divider()
-
-        patterns = result["analysis"].get("patterns", [])
-        if patterns:
-            st.subheader("Patterns identified")
-            for p in patterns:
-                with st.expander(f"**{p.get('person', '?')}** — {p.get('type', '')}"):
-                    if p.get("evidence"):
-                        st.markdown(f"> *\"{p['evidence']}\"*")
-                    if p.get("significance"):
-                        st.markdown(p["significance"])
-
-        dynamics = result["analysis"].get("dynamics", {})
-        if dynamics:
-            st.subheader("Relationship dynamics")
-            cols = st.columns(3)
-            if dynamics.get("power_balance"):
-                cols[0].markdown(f"**Balance**\n\n{dynamics['power_balance']}")
-            if dynamics.get("emotional_labor"):
-                cols[1].markdown(f"**Emotional labor**\n\n{dynamics['emotional_labor']}")
-            if dynamics.get("trajectory"):
-                cols[2].markdown(f"**Trajectory**\n\n{dynamics['trajectory']}")
-
-        # --- Behavioural stats row ---
-        dyn = features.get("dynamics", {})
-        lor = dyn.get("left_on_read", {})
-        dbl = dyn.get("double_texts", {})
-        ini = dyn.get("conversation_initiations", {})
-        if lor or dbl or ini:
-            st.subheader("Behavioural patterns")
-            stat_senders = features["senders"][:6]
-            bcols = st.columns(len(stat_senders))
-            for i, s in enumerate(stat_senders):
-                bcols[i].markdown(f"**{s}**")
-                bcols[i].markdown(
-                    f"Left on read: **{lor.get(s, 0)}×**  \n"
-                    f"Double-texts sent: **{dbl.get(s, 0)}×**  \n"
-                    f"Started conversations: **{ini.get(s, 0)}×**"
-                )
-
-        # --- Conversation trajectory ---
-        trajectory = features.get("trajectory", [])
-        if len(trajectory) >= 3:
-            st.divider()
-            st.subheader("Conversation over time")
-            traj_senders = features["senders"]
-
-            share_data = {"Period": [b["label"] for b in trajectory]}
-            distortion_data = {"Period": [b["label"] for b in trajectory]}
-            for s in traj_senders:
-                share_data[s] = [b["per_person"].get(s, {}).get("message_share_pct", 0) for b in trajectory]
-                distortion_data[s] = [b["per_person"].get(s, {}).get("distortion_signals", 0) for b in trajectory]
-
-            share_df = pd.DataFrame(share_data).melt("Period", var_name="Person", value_name="Share %")
-            dist_df = pd.DataFrame(distortion_data).melt("Period", var_name="Person", value_name="Distortion signals")
-
-            col1, col2 = st.columns(2)
-            with col1:
-                fig_share = px.line(share_df, x="Period", y="Share %", color="Person",
-                                    title="Message share over time", markers=True, height=280)
-                fig_share.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", legend_title="")
-                st.plotly_chart(fig_share, width="stretch")
-            with col2:
-                fig_dist = px.bar(dist_df, x="Period", y="Distortion signals", color="Person",
-                                  title="Distortion signals over time", barmode="group", height=280)
-                fig_dist.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", legend_title="")
-                st.plotly_chart(fig_dist, width="stretch")
-
-        # --- Language accommodation (1:1 only) ---
-        accommodation = features.get("accommodation")
-        if accommodation:
-            st.divider()
-            st.subheader("Language accommodation")
-            score = accommodation["overall_score"]
-            trend = accommodation.get("trend", [])
-            c1, c2 = st.columns([1, 3])
-            c1.metric("Alignment score", f"{score:.0%}", help="How similar your function-word usage is (pronouns, prepositions, connectives). Higher = more linguistic mirroring.")
-            c1.caption(accommodation["interpretation"])
-            if len(trend) >= 3:
-                trend_df = pd.DataFrame(trend)
-                fig_acc = px.line(trend_df, x="label", y="score", markers=True,
-                                  title="Linguistic alignment over time", height=250,
-                                  labels={"label": "", "score": "Alignment"})
-                fig_acc.update_yaxes(range=[0, 1])
-                fig_acc.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
-                c2.plotly_chart(fig_acc, width="stretch")
-
-        # --- Group-specific features ---
-        group_data = features.get("group", {})
-        if group_data:
-            cohesion = group_data.get("cohesion", {})
-            topic_own = group_data.get("topic_ownership", {})
-            subgroups = group_data.get("subgroups", [])
-
-            if cohesion:
-                st.divider()
-                st.subheader("Group health")
-                gc1, gc2, gc3 = st.columns(3)
-                gc1.metric("Cohesion score", f"{cohesion['overall_cohesion']:.0%}")
-                gc2.metric("Participation balance", f"{cohesion['participation_balance']:.0%}",
-                           help="How evenly messages are distributed across members")
-                gc3.metric("Reply ratio", f"{cohesion['reply_ratio']:.0%}",
-                           help="Fraction of messages that get a quick reply")
-                st.caption(cohesion["interpretation"])
-
-            if topic_own:
-                st.subheader("Topic ownership")
-                st.caption("Who sends messages that get a quick reply vs go unanswered")
-                to_rows = [{"Person": s, **v} for s, v in topic_own.items()]
-                to_df = pd.DataFrame(to_rows)
-                fig_to = px.bar(to_df, x="Person", y="traction_rate_pct",
-                                title="% of messages that get replied to within 5 min",
-                                labels={"traction_rate_pct": "Traction rate %"}, height=260)
-                fig_to.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
-                st.plotly_chart(fig_to, width="stretch")
-
-            if subgroups and len(subgroups) > 1:
-                st.subheader("Subgroups detected")
-                for i, sg in enumerate(subgroups):
-                    label = "Tight cluster" if len(sg) > 1 else "Peripheral"
-                    st.markdown(f"**{label}**: {', '.join(sg)}")
-
-        st.divider()
-
-        st.subheader("Coaching report")
-        st.markdown(result["report"])
-
-        st.divider()
-        if st.button("🔗 Share report", type="primary"):
-            with st.spinner("Saving…"):
-                rid = save_report(result, features)
-            if rid:
-                share_url = f"{APP_URL}?r={rid}"
-                st.success("Report saved — share this link:")
-                st.code(share_url, language=None)
-            else:
-                st.warning("Sharing requires UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN to be set.")
-
-        with st.expander("Raw statistics"):
-            st.json(features)
+        _render_analysis(st.session_state.result, st.session_state.features)
