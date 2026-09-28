@@ -178,6 +178,40 @@ def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> N
         st.success("Done")
     st.divider()
 
+    # --- Distortion profile (LLM-scored) ---
+    distortion_profile = result["analysis"].get("distortion_profile", {})
+    if distortion_profile:
+        st.subheader("Distortion profile")
+        DISTORTION_LABELS = {
+            "catastrophizing": "Catastrophizing",
+            "mind_reading": "Mind-reading",
+            "black_white_thinking": "Black & white thinking",
+            "emotional_reasoning": "Emotional reasoning",
+        }
+        dp_cols = st.columns(len(distortion_profile))
+        for i, (person, profile) in enumerate(distortion_profile.items()):
+            with dp_cols[i]:
+                st.markdown(f"**{person}**")
+                for key, label in DISTORTION_LABELS.items():
+                    entry = profile.get(key, {})
+                    severity = entry.get("severity", 0) if isinstance(entry, dict) else 0
+                    example = entry.get("example") if isinstance(entry, dict) else None
+                    if severity > 0:
+                        bar = "█" * severity + "░" * (5 - severity)
+                        st.markdown(f"`{bar}` {label}")
+                        if example:
+                            st.caption(f"> {example[:80]}")
+
+    # --- Conflict events ---
+    conflict_events = features.get("conflict_events", [])
+    if conflict_events:
+        st.subheader(f"Conflict moments ({len(conflict_events)} detected)")
+        for ev in conflict_events[:5]:
+            de_esc = f" · de-escalated by **{ev['de_escalator']}**" if ev.get("de_escalator") else ""
+            with st.expander(f"{ev['start']} — initiated by **{ev['initiator']}**{de_esc}"):
+                st.caption(f"{ev['message_count']} messages · intensity {ev['intensity']}")
+                st.markdown(f"> *{ev['example']}*")
+
     patterns = result["analysis"].get("patterns", [])
     if patterns:
         st.subheader("Patterns identified")
@@ -227,16 +261,27 @@ def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> N
             distortion_data[s] = [b["per_person"].get(s, {}).get("distortion_signals", 0) for b in trajectory]
         share_df = pd.DataFrame(share_data).melt("Period", var_name="Person", value_name="Share %")
         dist_df = pd.DataFrame(distortion_data).melt("Period", var_name="Person", value_name="Distortion signals")
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         with col1:
             fig = px.line(share_df, x="Period", y="Share %", color="Person",
-                          title="Message share over time", markers=True, height=280)
+                          title="Message share", markers=True, height=260)
             fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", legend_title="")
             st.plotly_chart(fig, width="stretch")
         with col2:
             fig = px.bar(dist_df, x="Period", y="Distortion signals", color="Person",
-                         title="Distortion signals over time", barmode="group", height=280)
+                         title="Distortion signals", barmode="group", height=260)
             fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", legend_title="")
+            st.plotly_chart(fig, width="stretch")
+        with col3:
+            sentiment_data = [{"Period": b["label"], "Sentiment": b.get("sentiment", 0.5)}
+                              for b in trajectory]
+            sent_df = pd.DataFrame(sentiment_data)
+            fig = px.line(sent_df, x="Period", y="Sentiment", markers=True,
+                          title="Tone over time", height=260,
+                          labels={"Sentiment": "Positive ↑ / Negative ↓"})
+            fig.update_yaxes(range=[0, 1])
+            fig.add_hline(y=0.5, line_dash="dot", line_color="gray", opacity=0.4)
+            fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
             st.plotly_chart(fig, width="stretch")
 
     accommodation = features.get("accommodation")

@@ -16,6 +16,12 @@ CATASTROPHIZE_WORDS = {"always", "never", "everything", "nothing", "worst", "rui
 MIND_READ_PHRASES = ["you think", "you feel", "you don't", "you never", "you always", "you obviously", "you clearly", "you don't care", "you hate"]
 BLACK_WHITE_WORDS = {"either", "or", "completely", "totally", "absolutely", "perfect", "terrible", "hate", "love"}
 
+CONFLICT_EXTRA = {"wtf", "seriously", "unbelievable", "ridiculous", "whatever", "fine", "stop it",
+                  "leave me", "forget it", "never mind", "omg", "shut up", "enough"}
+POSITIVE_WORDS = {"love", "great", "amazing", "good", "happy", "excited", "thanks", "thank",
+                  "appreciate", "wonderful", "awesome", "perfect", "haha", "lol", "nice", "cool",
+                  "fun", "enjoy", "glad", "yes", "sure", "brilliant", "miss", "proud"}
+
 FUNCTION_WORDS = sorted({
     "the", "a", "an", "and", "but", "or", "so", "if", "not", "no",
     "is", "are", "was", "were", "be", "been", "have", "has", "had",
@@ -41,6 +47,7 @@ def extract_all(df: pd.DataFrame, is_group: bool) -> dict:
         "per_person": {s: _person_features(df, s) for s in senders},
         "dynamics": _dynamics(df, senders, is_group),
         "trajectory": _trajectory(df, senders),
+        "conflict_events": _conflict_patterns(df, senders),
     }
     if not is_group and len(senders) == 2:
         features["accommodation"] = _language_accommodation(df, senders)
@@ -177,6 +184,12 @@ def _trajectory(df: pd.DataFrame, senders: list) -> list:
     for period, group in df.groupby("_period"):
         if len(group) < 5:
             continue
+        all_words = " ".join(group[~group["is_media"]]["text"].str.lower()).split()
+        clean = [w.strip(".,!?") for w in all_words]
+        pos = sum(1 for w in clean if w in POSITIVE_WORDS)
+        neg = sum(1 for w in clean if w in CATASTROPHIZE_WORDS | BLACK_WHITE_WORDS | CONFLICT_EXTRA)
+        sentiment = round(pos / (pos + neg), 3) if (pos + neg) > 0 else 0.5
+
         per_person = {}
         for s in senders:
             s_msgs = group[group["sender"] == s]
@@ -194,7 +207,7 @@ def _trajectory(df: pd.DataFrame, senders: list) -> list:
                 "i_ratio": round(sum(1 for w in words if w.strip(".,!?") in DISTRESS_PRONOUNS) / max(len(words), 1) * 100, 2),
                 "we_ratio": round(sum(1 for w in words if w.strip(".,!?") in BONDING_PRONOUNS) / max(len(words), 1) * 100, 2),
             }
-        buckets.append({"label": _period_label(period), "per_person": per_person})
+        buckets.append({"label": _period_label(period), "sentiment": sentiment, "per_person": per_person})
     return buckets
 
 
@@ -381,6 +394,65 @@ def _subgroups(reply_network: dict, senders: list) -> list:
 
     loners = [s for s in senders if s not in assigned]
     return [sorted(sg) for sg in subgroups] + [[s] for s in loners]
+
+
+def _conflict_patterns(df: pd.DataFrame, senders: list) -> list:
+    """Detect conflict windows: bursts of 3+ distress signals within 45 minutes."""
+    df = df.sort_values("timestamp").reset_index(drop=True)
+    text_df = df[~df["is_media"] & (df["text"].str.len() > 0)].copy()
+
+    ALL_CONFLICT = CATASTROPHIZE_WORDS | BLACK_WHITE_WORDS | CONFLICT_EXTRA
+
+    def conflict_score(text: str) -> int:
+        t = text.lower()
+        words = [w.strip(".,!?") for w in t.split()]
+        hits = sum(1 for w in words if w in ALL_CONFLICT)
+        hits += sum(1 for ph in MIND_READ_PHRASES if ph in t)
+        hits += 2 if sum(1 for c in text if c.isupper()) / max(len(text), 1) > 0.35 else 0
+        return hits
+
+    text_df["cscore"] = text_df["text"].apply(conflict_score)
+    conflict_msgs = text_df[text_df["cscore"] > 0].copy()
+
+    WINDOW = pd.Timedelta(minutes=45)
+    MIN_SIGNALS = 3
+    events = []
+    processed_until = pd.Timestamp.min.tz_localize(None)
+
+    for _, row in conflict_msgs.iterrows():
+        ts = row["timestamp"]
+        if hasattr(ts, "tzinfo") and ts.tzinfo is not None:
+            ts = ts.tz_localize(None) if processed_until.tzinfo is None else ts
+        if ts <= processed_until:
+            continue
+
+        window_end = ts + WINDOW
+        in_window = conflict_msgs[
+            (conflict_msgs["timestamp"] >= ts) &
+            (conflict_msgs["timestamp"] <= window_end)
+        ]
+
+        if in_window["cscore"].sum() >= MIN_SIGNALS:
+            ctx = text_df[
+                (text_df["timestamp"] >= ts) &
+                (text_df["timestamp"] <= window_end)
+            ]
+            initiator = in_window.iloc[0]["sender"]
+            # De-escalator: last unique sender who replied after the peak
+            unique_senders = ctx["sender"].tolist()
+            de_escalator = unique_senders[-1] if unique_senders else None
+
+            events.append({
+                "start": ts.strftime("%Y-%m-%d %H:%M"),
+                "initiator": initiator,
+                "de_escalator": de_escalator if de_escalator != initiator else None,
+                "intensity": round(in_window["cscore"].sum() / max(len(ctx), 1), 2),
+                "message_count": len(ctx),
+                "example": row["text"][:120],
+            })
+            processed_until = window_end
+
+    return events
 
 
 def _top_emojis(emojis: list, n: int = 5) -> list:

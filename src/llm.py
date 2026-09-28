@@ -55,6 +55,8 @@ def _build_prompt(features: dict, messages: list[dict]) -> str:
         "double_texts": features["dynamics"]["double_texts"],
         "left_on_read": features["dynamics"]["left_on_read"],
         "reply_times": features["dynamics"]["reply_time_stats"],
+        "conflict_events_count": len(features.get("conflict_events", [])),
+        "conflict_events": features.get("conflict_events", [])[:5],
         "per_person_stats": {
             s: {
                 "avg_message_length_words": features["per_person"][s]["avg_message_length"],
@@ -110,6 +112,14 @@ Respond in this exact format:
     "power_balance": "<who leads, who follows, and how>",
     "emotional_labor": "<who carries more, specific evidence>",
     "trajectory": "<is this relationship/group warming, cooling, or stagnant based on the arc of messages>"
+  }},
+  "distortion_profile": {{
+    "<sender name>": {{
+      "catastrophizing": {{"severity": 0, "example": "<quote or null>"}},
+      "mind_reading": {{"severity": 0, "example": "<quote or null>"}},
+      "black_white_thinking": {{"severity": 0, "example": "<quote or null>"}},
+      "emotional_reasoning": {{"severity": 0, "example": "<quote or null>"}}
+    }}
   }}{group_roles_field}
 }}
 </analysis>
