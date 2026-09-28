@@ -33,11 +33,11 @@ def save_report(result: dict, features: dict) -> Optional[str]:
     rid = str(uuid.uuid4())
     payload = json.dumps({"result": result, "features": features})
 
-    # SET key value EX ttl
+    # Upstash REST: POST /set/{key} with body [value, "EX", ttl]
     resp = requests.post(
         f"{url}/set/{rid}",
         headers={**headers, "Content-Type": "application/json"},
-        json={"value": payload, "EX": _REPORT_TTL_SECONDS},
+        json=[payload, "EX", _REPORT_TTL_SECONDS],
     )
     if resp.ok:
         return rid
