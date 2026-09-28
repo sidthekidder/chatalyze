@@ -372,7 +372,7 @@ if uploaded:
                 st.success("Report saved — share this link:")
                 st.code(share_url, language=None)
             else:
-                st.warning("Sharing requires SUPABASE_URL and SUPABASE_KEY to be set.")
+                st.warning("Sharing requires UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN to be set.")
 
         with st.expander("Raw statistics"):
             st.json(features)

@@ -1,44 +1,66 @@
 """
-Supabase-backed report storage for shareable links.
-Stores only the analysis result and computed features — no raw messages.
+Upstash Redis-backed report storage for shareable links.
+Uses the Upstash REST API — no SDK, just HTTP. Never pauses unlike Supabase free tier.
+Stores only analysis result and computed features — no raw messages.
+Reports expire after 90 days.
 """
+import json
 import os
+import uuid
 from typing import Optional
 
+_REPORT_TTL_SECONDS = 60 * 60 * 24 * 90  # 90 days
 
-def _client():
-    try:
-        from supabase import create_client
-        url = os.getenv("SUPABASE_URL")
-        key = os.getenv("SUPABASE_KEY")
-        if not url or not key:
-            return None
-        return create_client(url, key)
-    except Exception:
-        return None
+
+def _headers() -> dict:
+    token = os.getenv("UPSTASH_REDIS_REST_TOKEN")
+    if not token:
+        return {}
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _base_url() -> Optional[str]:
+    return os.getenv("UPSTASH_REDIS_REST_URL")
 
 
 def save_report(result: dict, features: dict) -> Optional[str]:
-    client = _client()
-    if not client:
+    import requests
+    url = _base_url()
+    headers = _headers()
+    if not url or not headers:
         return None
-    resp = client.table("reports").insert({
-        "data": {"result": result, "features": features}
-    }).execute()
-    if resp.data:
-        return resp.data[0]["id"]
+
+    rid = str(uuid.uuid4())
+    payload = json.dumps({"result": result, "features": features})
+
+    # SET key value EX ttl
+    resp = requests.post(
+        f"{url}/set/{rid}",
+        headers={**headers, "Content-Type": "application/json"},
+        json={"value": payload, "EX": _REPORT_TTL_SECONDS},
+    )
+    if resp.ok:
+        return rid
     return None
 
 
 def load_report(report_id: str) -> Optional[tuple[dict, dict]]:
-    client = _client()
-    if not client:
+    import requests
+    url = _base_url()
+    headers = _headers()
+    if not url or not headers:
         return None
+
+    resp = requests.get(f"{url}/get/{report_id}", headers=headers)
+    if not resp.ok:
+        return None
+
+    raw = resp.json().get("result")
+    if not raw:
+        return None
+
     try:
-        resp = client.table("reports").select("data").eq("id", report_id).single().execute()
-        if resp.data:
-            d = resp.data["data"]
-            return d["result"], d["features"]
-    except Exception:
-        pass
-    return None
+        d = json.loads(raw)
+        return d["result"], d["features"]
+    except (json.JSONDecodeError, KeyError):
+        return None
