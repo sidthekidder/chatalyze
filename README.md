@@ -96,25 +96,13 @@ The feature set is grounded in psycholinguistics and relationship research:
 
 ---
 
-## Supported formats
-
-| Format | Example |
-|--------|---------|
-| Android standard | `12/31/23, 11:59 PM - Name: message` |
-| Android 24h | `31/12/23, 23:59 - Name: message` |
-| Android European | `31.12.2023, 23:59 - Name: message` |
-| iOS / newer Android | `[31/12/23, 23:59:05] Name: message` |
-| Multilingual exports | RTL/LTR markers stripped automatically |
-
 ---
 
 ## Roadmap
 
-- [ ] iMessage and Telegram export support
+- [ ] iMessage export support
 - [ ] Longitudinal tracking — compare analyses over time
 - [ ] Group chat UX improvements
-- [ ] Multilingual coaching (Hindi, Spanish, Portuguese)
-- [ ] Professional communication mode (Slack, email)
 
 ---
 
