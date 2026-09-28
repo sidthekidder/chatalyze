@@ -240,6 +240,23 @@ if uploaded:
             if dynamics.get("trajectory"):
                 cols[2].markdown(f"**Trajectory**\n\n{dynamics['trajectory']}")
 
+        # --- Behavioural stats row ---
+        dyn = features.get("dynamics", {})
+        lor = dyn.get("left_on_read", {})
+        dbl = dyn.get("double_texts", {})
+        ini = dyn.get("conversation_initiations", {})
+        if lor or dbl or ini:
+            st.subheader("Behavioural patterns")
+            stat_senders = features["senders"][:6]
+            bcols = st.columns(len(stat_senders))
+            for i, s in enumerate(stat_senders):
+                bcols[i].markdown(f"**{s}**")
+                bcols[i].markdown(
+                    f"Left on read: **{lor.get(s, 0)}×**  \n"
+                    f"Double-texts sent: **{dbl.get(s, 0)}×**  \n"
+                    f"Started conversations: **{ini.get(s, 0)}×**"
+                )
+
         # --- Conversation trajectory ---
         trajectory = features.get("trajectory", [])
         if len(trajectory) >= 3:

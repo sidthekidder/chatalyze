@@ -53,6 +53,7 @@ def _build_prompt(features: dict, messages: list[dict]) -> str:
         "message_share": features["dynamics"]["message_share_pct"],
         "conversation_initiations": features["dynamics"]["conversation_initiations"],
         "double_texts": features["dynamics"]["double_texts"],
+        "left_on_read": features["dynamics"]["left_on_read"],
         "reply_times": features["dynamics"]["reply_time_stats"],
         "per_person_stats": {
             s: {

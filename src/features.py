@@ -98,9 +98,10 @@ def _dynamics(df: pd.DataFrame, senders: list, is_group: bool) -> dict:
     initiations = defaultdict(int)
     double_texts = defaultdict(int)
     reply_times = defaultdict(list)
-    left_on_read = defaultdict(int)
+    left_on_read = defaultdict(int)  # how many times this person was left on read
 
     SESSION_GAP = pd.Timedelta(hours=4)
+    LEFT_ON_READ_GAP = pd.Timedelta(minutes=15)
     prev_sender = None
     prev_time = None
     session_start = None
@@ -114,9 +115,12 @@ def _dynamics(df: pd.DataFrame, senders: list, is_group: bool) -> dict:
             initiations[sender] += 1
             session_start = ts
 
-        # double-text: same sender twice without reply
-        if sender == prev_sender:
+        if sender == prev_sender and prev_time:
+            # double-text: same sender twice without reply
             double_texts[sender] += 1
+            # left on read: same sender follows up after a real wait (not just rapid-fire)
+            if (ts - prev_time) > LEFT_ON_READ_GAP:
+                left_on_read[sender] += 1
 
         # reply time: how long before this sender responded to the previous different sender
         if prev_sender and sender != prev_sender and prev_time:
@@ -143,6 +147,7 @@ def _dynamics(df: pd.DataFrame, senders: list, is_group: bool) -> dict:
         "conversation_initiations": dict(initiations),
         "double_texts": dict(double_texts),
         "reply_time_stats": reply_time_stats,
+        "left_on_read": dict(left_on_read),
     }
 
 
