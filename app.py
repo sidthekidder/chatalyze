@@ -202,16 +202,6 @@ def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> N
                         if example:
                             st.caption(f"> {example[:80]}")
 
-    # --- Conflict events ---
-    conflict_events = features.get("conflict_events", [])
-    if conflict_events:
-        st.subheader(f"Conflict moments ({len(conflict_events)} detected)")
-        for ev in conflict_events[:5]:
-            de_esc = f" · de-escalated by **{ev['de_escalator']}**" if ev.get("de_escalator") else ""
-            with st.expander(f"{ev['start']} — initiated by **{ev['initiator']}**{de_esc}"):
-                st.caption(f"{ev['message_count']} messages · intensity {ev['intensity']}")
-                st.markdown(f"> *{ev['example']}*")
-
     patterns = result["analysis"].get("patterns", [])
     if patterns:
         st.subheader("Patterns identified")
