@@ -20,7 +20,7 @@ DISTRESS_WORDS = {
 N_BUCKETS = 5  # divide timeline into 5 equal periods
 
 
-def sample(df: pd.DataFrame, features: dict, n: int = 55) -> list[dict]:
+def sample(df: pd.DataFrame, features: dict, n: int = 90) -> list[dict]:
     text_df = df[~df["is_media"] & (df["text"].str.len() > 0)].copy()
     if len(text_df) == 0:
         return []
