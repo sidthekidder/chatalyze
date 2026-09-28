@@ -12,6 +12,9 @@ from src.parser import parse, to_dataframe, detect_format
 from src.features import extract_all
 from src.sampler import sample
 from src.llm import analyze
+from src.storage import save_report, load_report
+
+APP_URL = os.getenv("APP_URL", "https://chatalyze.streamlit.app")
 
 
 def _md_to_html(text: str) -> str:
@@ -128,6 +131,21 @@ st.set_page_config(
 
 st.title("Chatalyze")
 st.caption("Your words are a mirror. Most people never look.")
+
+# --- Shared report loader ---
+_shared_id = st.query_params.get("r")
+if _shared_id:
+    st.divider()
+    with st.spinner("Loading shared report…"):
+        _loaded = load_report(_shared_id)
+    if _loaded:
+        _result, _features = _loaded
+        st.success(f"Shared report — {_features['date_range']['days']} days · {_features['total_messages']:,} messages")
+        st.session_state.result = _result
+        st.session_state.features = _features
+    else:
+        st.error("Report not found or sharing not configured.")
+    # Fall through to render section below (session_state will handle display)
 
 st.divider()
 
@@ -346,15 +364,15 @@ if uploaded:
         st.markdown(result["report"])
 
         st.divider()
-        html = _build_html_report(features, result)
-        senders_slug = "-".join(s.replace(" ", "_") for s in features.get("senders", []))[:60]
-        report_filename = f"chatalyze-{senders_slug}.html" if senders_slug else "chatalyze-report.html"
-        st.download_button(
-            label="Download report (HTML)",
-            data=html,
-            file_name=report_filename,
-            mime="text/html",
-        )
+        if st.button("🔗 Share report", type="primary"):
+            with st.spinner("Saving…"):
+                rid = save_report(result, features)
+            if rid:
+                share_url = f"{APP_URL}?r={rid}"
+                st.success("Report saved — share this link:")
+                st.code(share_url, language=None)
+            else:
+                st.warning("Sharing requires SUPABASE_URL and SUPABASE_KEY to be set.")
 
         with st.expander("Raw statistics"):
             st.json(features)
