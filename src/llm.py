@@ -60,7 +60,6 @@ def _build_prompt(features: dict, messages: list[dict]) -> str:
                 "questions_asked": features["per_person"][s]["questions_asked"],
                 "pronoun_ratios": features["per_person"][s]["pronoun_ratios"],
                 "distortion_signals": features["per_person"][s]["distortion_signals"],
-                "top_emojis": features["per_person"][s]["top_emojis"],
             }
             for s in senders
         },

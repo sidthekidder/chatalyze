@@ -20,7 +20,7 @@ DISTRESS_WORDS = {
 N_BUCKETS = 5  # divide timeline into 5 equal periods
 
 
-def sample(df: pd.DataFrame, features: dict, n: int = 100) -> list[dict]:
+def sample(df: pd.DataFrame, features: dict, n: int = 55) -> list[dict]:
     text_df = df[~df["is_media"] & (df["text"].str.len() > 0)].copy()
     if len(text_df) == 0:
         return []
@@ -79,7 +79,7 @@ def sample(df: pd.DataFrame, features: dict, n: int = 100) -> list[dict]:
         {
             "sender": row["sender"],
             "time": str(row["timestamp"].strftime("%Y-%m-%d %H:%M")),
-            "text": row["text"][:500],
+            "text": row["text"][:250],
         }
         for _, row in sampled.iterrows()
     ]
