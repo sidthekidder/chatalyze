@@ -26,7 +26,7 @@ def analyze(features: dict, sampled_messages: list[dict]) -> dict:
                 model="openai/gpt-oss-120b",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
-                max_tokens=4096,
+                max_tokens=3000,
             )
             return _parse_response(response.choices[0].message.content)
         except Exception as e:
