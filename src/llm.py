@@ -111,26 +111,27 @@ End with a short section called 'What to try' with 2-3 specific, actionable thin
 def _parse_response(text: str) -> dict:
     import re
 
-    analysis_match = re.search(r"<analysis>(.*?)</analysis>", text, re.DOTALL)
-    report_match = re.search(r"<report>(.*?)</report>", text, re.DOTALL)
-
+    # Extract analysis block — between <analysis> and </analysis>
     analysis = {}
+    analysis_match = re.search(r"<analysis>(.*?)</analysis>", text, re.DOTALL)
     if analysis_match:
         raw = analysis_match.group(1).strip()
-        # strip markdown code fences the LLM sometimes wraps around JSON
         raw = re.sub(r"^```(?:json)?\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw)
         try:
             analysis = json.loads(raw)
         except json.JSONDecodeError:
-            analysis = {"raw": raw}
+            analysis = {}
 
+    # Extract report block — everything after <report>, closing tag optional
     report = ""
+    report_match = re.search(r"<report>(.*?)(?:</report>|$)", text, re.DOTALL)
     if report_match:
         report = report_match.group(1).strip()
-        # strip leading bold/header lines the LLM sometimes adds
         report = re.sub(r"^\*\*[^*]+\*\*\s*\n?", "", report).strip()
-    else:
-        report = text
+
+    # Fallback: if neither tag found, use full text as report
+    if not report and not analysis:
+        report = text.strip()
 
     return {"analysis": analysis, "report": report}
