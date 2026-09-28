@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import pandas as pd
 import streamlit as st
 from datetime import date
 from dotenv import load_dotenv
@@ -176,7 +177,7 @@ if uploaded:
     fig = px.bar(daily, x="date", y="count", color="sender",
                  title="Messages over time", labels={"date": "", "count": "Messages"}, height=300)
     fig.update_layout(legend_title="", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     st.divider()
 
@@ -278,12 +279,12 @@ if uploaded:
                 fig_share = px.line(share_df, x="Period", y="Share %", color="Person",
                                     title="Message share over time", markers=True, height=280)
                 fig_share.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", legend_title="")
-                st.plotly_chart(fig_share, use_container_width=True)
+                st.plotly_chart(fig_share, width="stretch")
             with col2:
                 fig_dist = px.bar(dist_df, x="Period", y="Distortion signals", color="Person",
                                   title="Distortion signals over time", barmode="group", height=280)
                 fig_dist.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", legend_title="")
-                st.plotly_chart(fig_dist, use_container_width=True)
+                st.plotly_chart(fig_dist, width="stretch")
 
         # --- Language accommodation (1:1 only) ---
         accommodation = features.get("accommodation")
@@ -302,7 +303,7 @@ if uploaded:
                                   labels={"label": "", "score": "Alignment"})
                 fig_acc.update_yaxes(range=[0, 1])
                 fig_acc.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
-                c2.plotly_chart(fig_acc, use_container_width=True)
+                c2.plotly_chart(fig_acc, width="stretch")
 
         # --- Group-specific features ---
         group_data = features.get("group", {})
@@ -331,7 +332,7 @@ if uploaded:
                                 title="% of messages that get replied to within 5 min",
                                 labels={"traction_rate_pct": "Traction rate %"}, height=260)
                 fig_to.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
-                st.plotly_chart(fig_to, use_container_width=True)
+                st.plotly_chart(fig_to, width="stretch")
 
             if subgroups and len(subgroups) > 1:
                 st.subheader("Subgroups detected")
