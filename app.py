@@ -124,6 +124,56 @@ def _build_html_report(features: dict, result: dict) -> str:
 def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> None:
     import plotly.express as px
 
+    # --- Hero header ---
+    senders = features["senders"]
+    dr = features["date_range"]
+    if len(senders) == 2:
+        chat_title = f"{senders[0]} & {senders[1]}"
+    else:
+        chat_title = ", ".join(senders[:3]) + (f" + {len(senders)-3} more" if len(senders) > 3 else "")
+
+    st.markdown(f"## {chat_title}")
+    st.caption(f"{dr['start']} → {dr['end']}  ·  {dr['days']} days  ·  {features['total_messages']:,} messages")
+
+    # Summary row: message share donut + key metrics
+    share = features["dynamics"].get("message_share_pct", {})
+    rt_stats = features["dynamics"].get("reply_time_stats", {})
+
+    col_chart, col_stats = st.columns([1, 2])
+
+    with col_chart:
+        fig = px.pie(
+            names=list(share.keys()),
+            values=list(share.values()),
+            hole=0.55,
+            height=220,
+        )
+        fig.update_traces(textinfo="label+percent", textposition="outside")
+        fig.update_layout(
+            showlegend=False,
+            margin=dict(t=10, b=10, l=10, r=10),
+            paper_bgcolor="rgba(0,0,0,0)",
+        )
+        st.plotly_chart(fig, width="stretch")
+
+    with col_stats:
+        st.markdown("**At a glance**")
+        mc = st.columns(min(len(senders), 3))
+        for i, s in enumerate(senders[:3]):
+            p = features["per_person"].get(s, {})
+            rt = rt_stats.get(s, {})
+            mc[i].metric(s, f"{p.get('message_count', 0):,} msgs",
+                         f"{share.get(s, 0)}% of chat")
+            if rt:
+                mc[i].caption(f"Median reply: {rt['median_minutes']} min")
+
+        # Trajectory one-liner from LLM dynamics
+        traj = result["analysis"].get("dynamics", {}).get("trajectory", "")
+        if traj:
+            st.info(f"**Trajectory:** {traj}")
+
+    st.divider()
+
     if not is_shared:
         st.success("Done")
     st.divider()
