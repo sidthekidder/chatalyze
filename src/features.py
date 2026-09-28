@@ -12,9 +12,24 @@ DISTRESS_PRONOUNS = {"i", "me", "my", "myself", "mine"}
 BONDING_PRONOUNS = {"we", "us", "our", "ours", "ourselves"}
 BLAME_PRONOUNS = {"you", "your", "yours", "yourself"}
 
-CATASTROPHIZE_WORDS = {"always", "never", "everything", "nothing", "worst", "ruined", "disaster", "impossible", "hopeless"}
+CATASTROPHIZE_WORDS = {"everything", "nothing", "worst", "ruined", "disaster", "impossible", "hopeless", "doomed", "destroyed", "catastrophe", "terrible", "unbearable"}
 MIND_READ_PHRASES = ["you think", "you feel", "you don't", "you never", "you always", "you obviously", "you clearly", "you don't care", "you hate"]
 BLACK_WHITE_WORDS = {"either", "or", "completely", "totally", "absolutely", "perfect", "terrible", "hate", "love"}
+
+PERSONALIZATION_PHRASES = [
+    "my fault", "i ruined", "because of me", "i caused", "i'm the reason",
+    "i always mess", "i messed up", "all my fault", "i should have",
+    "i'm the problem", "i'm sorry for being",
+]
+REPAIR_WORDS = {
+    "sorry", "apologize", "apologies", "forgive", "my bad",
+    "youre right", "you're right", "i was wrong", "my mistake",
+    "i understand", "lets", "let's", "i hear you",
+}
+COGNITIVE_WORDS = {
+    "realize", "realized", "understand", "understood", "figured",
+    "learned", "discovered", "recognize", "noticed",
+}
 
 CONFLICT_EXTRA = {"wtf", "seriously", "unbelievable", "ridiculous", "whatever", "fine", "stop it",
                   "leave me", "forget it", "never mind", "omg", "shut up", "enough"}
@@ -69,13 +84,26 @@ def _person_features(df: pd.DataFrame, sender: str) -> dict:
         "you_your": sum(1 for w in words if w.strip(".,!?") in BLAME_PRONOUNS),
     }
 
+    word_count_100 = max(word_count / 100, 1)
     distortions = {
-        "catastrophizing": sum(1 for w in words if w.strip(".,!?") in CATASTROPHIZE_WORDS),
-        "mind_reading": sum(
-            1 for msg in text_msgs["text"].str.lower()
-            for phrase in MIND_READ_PHRASES if phrase in msg
+        "catastrophizing_per100": round(
+            sum(1 for w in words if w.strip(".,!?") in CATASTROPHIZE_WORDS) / word_count_100, 2
         ),
-        "black_white_thinking": sum(1 for w in words if w.strip(".,!?") in BLACK_WHITE_WORDS),
+        "black_white_per100": round(
+            sum(1 for w in words if w.strip(".,!?") in BLACK_WHITE_WORDS) / word_count_100, 2
+        ),
+        "personalization": sum(
+            1 for msg in text_msgs["text"].str.lower()
+            if any(phrase in msg for phrase in PERSONALIZATION_PHRASES)
+        ),
+        "repair_attempts": sum(
+            1 for msg in text_msgs["text"].str.lower()
+            if any(w in msg.split() for w in REPAIR_WORDS)
+        ),
+        "cognitive_complexity": sum(
+            1 for msg in text_msgs["text"].str.lower()
+            if any(w in msg.split() for w in COGNITIVE_WORDS)
+        ),
     }
 
     emojis_used = [ch for ch in all_text if ch in emoji.EMOJI_DATA]
@@ -141,10 +169,13 @@ def _dynamics(df: pd.DataFrame, senders: list, is_group: bool) -> dict:
     reply_time_stats = {}
     for sender, times in reply_times.items():
         if times:
+            med = float(np.median(times))
             reply_time_stats[sender] = {
-                "median_minutes": round(float(np.median(times)), 1),
+                "median_minutes": round(med, 1),
                 "mean_minutes": round(float(np.mean(times)), 1),
                 "fast_replies_pct": round(sum(1 for t in times if t < 5) / len(times) * 100, 1),
+                "variance_minutes": round(float(np.std(times)), 1),
+                "spike_count": sum(1 for t in times if t > max(med * 3, 60)),
             }
 
     share = df["sender"].value_counts(normalize=True).mul(100).round(1).to_dict()
@@ -197,7 +228,6 @@ def _trajectory(df: pd.DataFrame, senders: list) -> list:
             words = " ".join(text_msgs["text"].str.lower()).split()
             distortions = (
                 sum(1 for w in words if w.strip(".,!?") in CATASTROPHIZE_WORDS)
-                + sum(1 for m in text_msgs["text"].str.lower() for ph in MIND_READ_PHRASES if ph in m)
                 + sum(1 for w in words if w.strip(".,!?") in BLACK_WHITE_WORDS)
             )
             per_person[s] = {
@@ -254,7 +284,41 @@ def _language_accommodation(df: pd.DataFrame, senders: list) -> dict:
     else:
         interp = "Low accommodation — you communicate in quite different registers."
 
-    return {"overall_score": overall, "trend": trend, "interpretation": interp}
+    # LSM asymmetry: per-exchange accommodation (Danescu-Niculescu-Mizil 2012)
+    # Who mirrors the other more per reply = accommodates more = may signal status/investment
+    text_df_sorted = text_df.sort_values("timestamp").reset_index(drop=True)
+    accomm_per_person: dict[str, list] = {s: [] for s in senders}
+    for i in range(1, len(text_df_sorted)):
+        curr = text_df_sorted.iloc[i]
+        prev = text_df_sorted.iloc[i - 1]
+        if curr["sender"] != prev["sender"]:
+            sim = _cosine(_fw_vector(curr["text"]), _fw_vector(prev["text"]))
+            accomm_per_person[curr["sender"]].append(sim)
+
+    asymmetry = {
+        s: round(float(np.mean(v)), 3) if v else 0.0
+        for s, v in accomm_per_person.items()
+    }
+    if len(senders) == 2:
+        s1, s2 = senders[0], senders[1]
+        diff = asymmetry.get(s1, 0.0) - asymmetry.get(s2, 0.0)
+        if abs(diff) > 0.02:
+            higher = s1 if diff > 0 else s2
+            lower = s2 if diff > 0 else s1
+            asym_interp = f"{higher} mirrors {lower}'s language more — may signal higher investment or lower perceived status."
+        else:
+            asym_interp = "Both accommodate each other at similar rates."
+    else:
+        highest = max(asymmetry, key=asymmetry.get) if asymmetry else ""
+        asym_interp = f"{highest} shows the highest language mirroring in the group." if highest else ""
+
+    return {
+        "overall_score": overall,
+        "trend": trend,
+        "interpretation": interp,
+        "asymmetry": asymmetry,
+        "asymmetry_interpretation": asym_interp,
+    }
 
 
 def _group_features(df: pd.DataFrame, senders: list) -> dict:

@@ -69,7 +69,12 @@ def _build_prompt(features: dict, messages: list[dict]) -> str:
         **({"group_roles": features["group"]["participant_roles"],
             "group_cohesion": features["group"].get("cohesion", {}).get("interpretation"),
             "topic_ownership": features["group"].get("topic_ownership")} if is_group else {}),
-        **({"language_accommodation": features["accommodation"]} if features.get("accommodation") else {}),
+        **({"language_accommodation": {
+            "overall_score": features["accommodation"]["overall_score"],
+            "interpretation": features["accommodation"]["interpretation"],
+            "asymmetry": features["accommodation"].get("asymmetry", {}),
+            "asymmetry_interpretation": features["accommodation"].get("asymmetry_interpretation", ""),
+        }} if features.get("accommodation") else {}),
         **({"trajectory_summary": {
             "first_period": features["trajectory"][0] if features.get("trajectory") else None,
             "last_period": features["trajectory"][-1] if features.get("trajectory") else None,
@@ -96,6 +101,15 @@ Rules for the coaching report:
 - NEVER use therapy-speak like "create a safe space", "validate feelings", "set intentions"
 - Write like a sharp, perceptive friend who has read everything
 
+Research-grounded notes for distortion assessment:
+- catastrophizing_per100 and black_white_per100 are reliable signals — flag only when density is meaningfully elevated (>1.5 per 100 words). Catastrophizing requires BOTH extreme language AND a clearly negative emotional prediction ("this will be a disaster", "nothing ever works", "it's all ruined") — do NOT flag neutral predictions, social anticipation, or observations that merely mention a large or busy situation
+- personalization count (self-blame: "my fault", "I ruined") is the most common distortion in casual chat — prioritize this
+- repair_attempts shows relationship health — low count alongside high conflict signals is significant
+- cognitive_complexity (insight words: realize, understand, figured) indicates integrative vs. defensive thinking
+- Do NOT flag mind-reading or emotional reasoning as confident findings — these are unreliable from text alone
+- you_your ratio in pronoun stats = confrontational framing (Gottman), not just accommodation
+- asymmetry_interpretation in language_accommodation reveals who defers to whom in this relationship
+
 Respond in this exact format:
 
 <analysis>
@@ -116,9 +130,8 @@ Respond in this exact format:
   "distortion_profile": {{
     "<sender name>": {{
       "catastrophizing": {{"severity": 0, "example": "<quote or null>"}},
-      "mind_reading": {{"severity": 0, "example": "<quote or null>"}},
       "black_white_thinking": {{"severity": 0, "example": "<quote or null>"}},
-      "emotional_reasoning": {{"severity": 0, "example": "<quote or null>"}}
+      "personalization": {{"severity": 0, "example": "<quote or null>"}}
     }}
   }}{group_roles_field}
 }}
