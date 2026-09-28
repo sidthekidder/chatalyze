@@ -183,13 +183,13 @@ if uploaded:
     # --- Run analysis ---
     st.subheader("Analysis")
 
-    gemini_key = os.getenv("GEMINI_API_KEY") or st.text_input(
-        "Gemini API key", type="password", help="Get a free key at aistudio.google.com"
+    groq_key = os.getenv("GROQ_API_KEY") or st.text_input(
+        "Groq API key", type="password", help="Get a free key at console.groq.com"
     )
 
-    if st.button("Run analysis", type="primary", disabled=not gemini_key):
-        if gemini_key:
-            os.environ["GEMINI_API_KEY"] = gemini_key
+    if st.button("Run analysis", type="primary", disabled=not groq_key):
+        if groq_key:
+            os.environ["GROQ_API_KEY"] = groq_key
 
         with st.spinner("Extracting features..."):
             features = extract_all(df, is_group)

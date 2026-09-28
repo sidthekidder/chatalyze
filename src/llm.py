@@ -1,33 +1,37 @@
 """
-Gemini integration. Single-pass analysis + coaching narrative.
+Groq LLM integration. Single-pass analysis + coaching narrative.
+Uses llama-3.3-70b-versatile — fast, free tier, 14,400 RPD.
 """
 import json
 import os
 import time
-import google.generativeai as genai
+from groq import Groq
 
 
 def analyze(features: dict, sampled_messages: list[dict]) -> dict:
     """
-    Single Gemini call. Returns structured analysis + coaching narrative.
+    Single Groq call. Returns structured analysis + coaching narrative.
     Retries up to 3 times on rate limit errors.
     """
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        raise ValueError("GEMINI_API_KEY not set")
+        raise ValueError("GROQ_API_KEY not set")
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-3.8-flash")
+    client = Groq(api_key=api_key)
     prompt = _build_prompt(features, sampled_messages)
 
     for attempt in range(3):
         try:
-            response = model.generate_content(prompt)
-            return _parse_response(response.text)
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=4096,
+            )
+            return _parse_response(response.choices[0].message.content)
         except Exception as e:
             if "429" in str(e) and attempt < 2:
-                wait = 30 * (attempt + 1)
-                time.sleep(wait)
+                time.sleep(30 * (attempt + 1))
             else:
                 raise
 
