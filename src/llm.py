@@ -63,7 +63,14 @@ def _build_prompt(features: dict, messages: list[dict]) -> str:
             }
             for s in senders
         },
-        **({"group_roles": features["group"]["participant_roles"]} if is_group else {}),
+        **({"group_roles": features["group"]["participant_roles"],
+            "group_cohesion": features["group"].get("cohesion", {}).get("interpretation"),
+            "topic_ownership": features["group"].get("topic_ownership")} if is_group else {}),
+        **({"language_accommodation": features["accommodation"]} if features.get("accommodation") else {}),
+        **({"trajectory_summary": {
+            "first_period": features["trajectory"][0] if features.get("trajectory") else None,
+            "last_period": features["trajectory"][-1] if features.get("trajectory") else None,
+        }} if features.get("trajectory") else {}),
     }, indent=2)
 
     return f"""You are analyzing a {chat_type} spanning {features['date_range']['days']} days.

@@ -16,6 +16,16 @@ CATASTROPHIZE_WORDS = {"always", "never", "everything", "nothing", "worst", "rui
 MIND_READ_PHRASES = ["you think", "you feel", "you don't", "you never", "you always", "you obviously", "you clearly", "you don't care", "you hate"]
 BLACK_WHITE_WORDS = {"either", "or", "completely", "totally", "absolutely", "perfect", "terrible", "hate", "love"}
 
+FUNCTION_WORDS = sorted({
+    "the", "a", "an", "and", "but", "or", "so", "if", "not", "no",
+    "is", "are", "was", "were", "be", "been", "have", "has", "had",
+    "do", "does", "did", "will", "would", "can", "could", "should",
+    "in", "on", "at", "to", "for", "of", "with", "by", "from", "into",
+    "i", "you", "it", "this", "that", "he", "she", "we", "they",
+    "me", "him", "her", "us", "them", "my", "your", "his", "our", "their",
+    "just", "like", "get", "know", "think", "what", "how", "when", "where",
+})
+
 
 def extract_all(df: pd.DataFrame, is_group: bool) -> dict:
     senders = df["sender"].unique().tolist()
@@ -30,7 +40,10 @@ def extract_all(df: pd.DataFrame, is_group: bool) -> dict:
         },
         "per_person": {s: _person_features(df, s) for s in senders},
         "dynamics": _dynamics(df, senders, is_group),
+        "trajectory": _trajectory(df, senders),
     }
+    if not is_group and len(senders) == 2:
+        features["accommodation"] = _language_accommodation(df, senders)
     if is_group:
         features["group"] = _group_features(df, senders)
     return features
@@ -133,6 +146,99 @@ def _dynamics(df: pd.DataFrame, senders: list, is_group: bool) -> dict:
     }
 
 
+def _period_label(p: pd.Period) -> str:
+    ts = p.to_timestamp()
+    if p.freqstr.startswith("Q"):
+        return f"Q{(ts.month - 1) // 3 + 1} {ts.year}"
+    if p.freqstr.startswith("M"):
+        return ts.strftime("%b %Y")
+    return ts.strftime("Week of %b %d")
+
+
+def _trajectory(df: pd.DataFrame, senders: list) -> list:
+    """Split chat into time periods, compute per-person metrics for each."""
+    days = (df["timestamp"].max() - df["timestamp"].min()).days
+    if days < 60:
+        freq = "W"
+    elif days < 547:
+        freq = "M"
+    else:
+        freq = "Q"
+
+    df = df.copy()
+    df["_period"] = df["timestamp"].dt.to_period(freq)
+
+    buckets = []
+    for period, group in df.groupby("_period"):
+        if len(group) < 5:
+            continue
+        per_person = {}
+        for s in senders:
+            s_msgs = group[group["sender"] == s]
+            text_msgs = s_msgs[~s_msgs["is_media"]]
+            words = " ".join(text_msgs["text"].str.lower()).split()
+            distortions = (
+                sum(1 for w in words if w.strip(".,!?") in CATASTROPHIZE_WORDS)
+                + sum(1 for m in text_msgs["text"].str.lower() for ph in MIND_READ_PHRASES if ph in m)
+                + sum(1 for w in words if w.strip(".,!?") in BLACK_WHITE_WORDS)
+            )
+            per_person[s] = {
+                "message_count": len(s_msgs),
+                "message_share_pct": round(len(s_msgs) / max(len(group), 1) * 100, 1),
+                "distortion_signals": distortions,
+                "i_ratio": round(sum(1 for w in words if w.strip(".,!?") in DISTRESS_PRONOUNS) / max(len(words), 1) * 100, 2),
+                "we_ratio": round(sum(1 for w in words if w.strip(".,!?") in BONDING_PRONOUNS) / max(len(words), 1) * 100, 2),
+            }
+        buckets.append({"label": _period_label(period), "per_person": per_person})
+    return buckets
+
+
+def _fw_vector(text: str) -> np.ndarray:
+    words = [w.strip(".,!?;:\"'") for w in text.lower().split()]
+    counts = np.array([words.count(fw) for fw in FUNCTION_WORDS], dtype=float)
+    norm = np.linalg.norm(counts)
+    return counts / norm if norm > 0 else counts
+
+
+def _cosine(a: np.ndarray, b: np.ndarray) -> float:
+    denom = np.linalg.norm(a) * np.linalg.norm(b)
+    return float(np.dot(a, b) / denom) if denom > 0 else 0.0
+
+
+def _language_accommodation(df: pd.DataFrame, senders: list) -> dict:
+    """How similar are the two speakers' function-word distributions? Tracks over time."""
+    text_df = df[~df["is_media"]].copy()
+
+    texts = {s: " ".join(text_df[text_df["sender"] == s]["text"].str.lower()) for s in senders}
+    overall = round(_cosine(_fw_vector(texts[senders[0]]), _fw_vector(texts[senders[1]])), 3)
+
+    days = (df["timestamp"].max() - df["timestamp"].min()).days
+    freq = "W" if days < 60 else ("M" if days < 547 else "Q")
+    text_df["_period"] = text_df["timestamp"].dt.to_period(freq)
+
+    trend = []
+    for period, group in text_df.groupby("_period"):
+        vecs = {}
+        for s in senders:
+            t = " ".join(group[group["sender"] == s]["text"].str.lower())
+            if t.strip():
+                vecs[s] = _fw_vector(t)
+        if len(vecs) == 2:
+            score = round(_cosine(vecs[senders[0]], vecs[senders[1]]), 3)
+            trend.append({"label": _period_label(period), "score": score})
+
+    if overall > 0.85:
+        interp = "Very high alignment — you've absorbed each other's communication style."
+    elif overall > 0.70:
+        interp = "Strong accommodation — language patterns are converging."
+    elif overall > 0.55:
+        interp = "Moderate alignment with distinct individual styles."
+    else:
+        interp = "Low accommodation — you communicate in quite different registers."
+
+    return {"overall_score": overall, "trend": trend, "interpretation": interp}
+
+
 def _group_features(df: pd.DataFrame, senders: list) -> dict:
     """Reply network: who replies to whom."""
     df = df.sort_values("timestamp").reset_index(drop=True)
@@ -181,11 +287,95 @@ def _group_features(df: pd.DataFrame, senders: list) -> dict:
 
         roles[s] = role
 
+    cohesion = _group_cohesion(df, senders, reply_matrix)
+    topic_own = _topic_ownership(df, senders)
+    subgroups = _subgroups(reply_matrix, senders)
+
     return {
         "reply_network": reply_matrix,
         "participant_roles": roles,
         "ignored_messages_count": dict(ignored_count),
+        "cohesion": cohesion,
+        "topic_ownership": topic_own,
+        "subgroups": subgroups,
     }
+
+
+def _group_cohesion(df: pd.DataFrame, senders: list, reply_network: dict) -> dict:
+    shares = np.array([len(df[df["sender"] == s]) for s in senders], dtype=float)
+    shares = shares / shares.sum()
+    entropy = float(-np.sum(shares * np.log(shares + 1e-10)))
+    max_entropy = np.log(len(senders))
+    participation = entropy / max_entropy if max_entropy > 0 else 0.0
+
+    total_replies = sum(sum(v.values()) for v in reply_network.values())
+    reply_ratio = min(total_replies / max(len(df), 1), 1.0)
+    overall = round((participation + reply_ratio) / 2, 3)
+
+    if overall > 0.65:
+        interp = "High cohesion — everyone participates and conversations are reciprocal."
+    elif overall > 0.40:
+        interp = "Moderate cohesion — some members carry the conversation more than others."
+    else:
+        interp = "Low cohesion — conversation is dominated or mostly one-directional."
+
+    return {
+        "participation_balance": round(participation, 3),
+        "reply_ratio": round(reply_ratio, 3),
+        "overall_cohesion": overall,
+        "interpretation": interp,
+    }
+
+
+def _topic_ownership(df: pd.DataFrame, senders: list) -> dict:
+    """Who starts exchanges that get a quick reply (within 5 min)?"""
+    df = df.sort_values("timestamp").reset_index(drop=True)
+    WINDOW = pd.Timedelta(minutes=5)
+    traction = defaultdict(int)
+    ignored = defaultdict(int)
+
+    for i in range(len(df) - 1):
+        row, nxt = df.iloc[i], df.iloc[i + 1]
+        if nxt["sender"] != row["sender"] and (nxt["timestamp"] - row["timestamp"]) <= WINDOW:
+            traction[row["sender"]] += 1
+        else:
+            ignored[row["sender"]] += 1
+
+    result = {}
+    for s in senders:
+        t, ig = traction.get(s, 0), ignored.get(s, 0)
+        result[s] = {
+            "messages_with_traction": t,
+            "traction_rate_pct": round(t / max(t + ig, 1) * 100, 1),
+        }
+    return result
+
+
+def _subgroups(reply_network: dict, senders: list) -> list:
+    """Detect cliques from reply patterns — only meaningful in groups of 4+."""
+    if len(senders) < 4:
+        return []
+
+    edges = defaultdict(float)
+    for replier, targets in reply_network.items():
+        for target, count in targets.items():
+            key = tuple(sorted([replier, target]))
+            edges[key] += count
+
+    subgroups: list[set] = []
+    assigned: set = set()
+    for (a, b), weight in sorted(edges.items(), key=lambda x: -x[1]):
+        if weight < 3:
+            continue
+        found = next((sg for sg in subgroups if a in sg or b in sg), None)
+        if found is not None:
+            found.update([a, b])
+        else:
+            subgroups.append({a, b})
+        assigned.update([a, b])
+
+    loners = [s for s in senders if s not in assigned]
+    return [sorted(sg) for sg in subgroups] + [[s] for s in loners]
 
 
 def _top_emojis(emojis: list, n: int = 5) -> list:

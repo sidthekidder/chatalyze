@@ -240,6 +240,88 @@ if uploaded:
             if dynamics.get("trajectory"):
                 cols[2].markdown(f"**Trajectory**\n\n{dynamics['trajectory']}")
 
+        # --- Conversation trajectory ---
+        trajectory = features.get("trajectory", [])
+        if len(trajectory) >= 3:
+            st.divider()
+            st.subheader("Conversation over time")
+            traj_senders = features["senders"]
+
+            share_data = {"Period": [b["label"] for b in trajectory]}
+            distortion_data = {"Period": [b["label"] for b in trajectory]}
+            for s in traj_senders:
+                share_data[s] = [b["per_person"].get(s, {}).get("message_share_pct", 0) for b in trajectory]
+                distortion_data[s] = [b["per_person"].get(s, {}).get("distortion_signals", 0) for b in trajectory]
+
+            share_df = pd.DataFrame(share_data).melt("Period", var_name="Person", value_name="Share %")
+            dist_df = pd.DataFrame(distortion_data).melt("Period", var_name="Person", value_name="Distortion signals")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                fig_share = px.line(share_df, x="Period", y="Share %", color="Person",
+                                    title="Message share over time", markers=True, height=280)
+                fig_share.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", legend_title="")
+                st.plotly_chart(fig_share, use_container_width=True)
+            with col2:
+                fig_dist = px.bar(dist_df, x="Period", y="Distortion signals", color="Person",
+                                  title="Distortion signals over time", barmode="group", height=280)
+                fig_dist.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", legend_title="")
+                st.plotly_chart(fig_dist, use_container_width=True)
+
+        # --- Language accommodation (1:1 only) ---
+        accommodation = features.get("accommodation")
+        if accommodation:
+            st.divider()
+            st.subheader("Language accommodation")
+            score = accommodation["overall_score"]
+            trend = accommodation.get("trend", [])
+            c1, c2 = st.columns([1, 3])
+            c1.metric("Alignment score", f"{score:.0%}", help="How similar your function-word usage is (pronouns, prepositions, connectives). Higher = more linguistic mirroring.")
+            c1.caption(accommodation["interpretation"])
+            if len(trend) >= 3:
+                trend_df = pd.DataFrame(trend)
+                fig_acc = px.line(trend_df, x="label", y="score", markers=True,
+                                  title="Linguistic alignment over time", height=250,
+                                  labels={"label": "", "score": "Alignment"})
+                fig_acc.update_yaxes(range=[0, 1])
+                fig_acc.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+                c2.plotly_chart(fig_acc, use_container_width=True)
+
+        # --- Group-specific features ---
+        group_data = features.get("group", {})
+        if group_data:
+            cohesion = group_data.get("cohesion", {})
+            topic_own = group_data.get("topic_ownership", {})
+            subgroups = group_data.get("subgroups", [])
+
+            if cohesion:
+                st.divider()
+                st.subheader("Group health")
+                gc1, gc2, gc3 = st.columns(3)
+                gc1.metric("Cohesion score", f"{cohesion['overall_cohesion']:.0%}")
+                gc2.metric("Participation balance", f"{cohesion['participation_balance']:.0%}",
+                           help="How evenly messages are distributed across members")
+                gc3.metric("Reply ratio", f"{cohesion['reply_ratio']:.0%}",
+                           help="Fraction of messages that get a quick reply")
+                st.caption(cohesion["interpretation"])
+
+            if topic_own:
+                st.subheader("Topic ownership")
+                st.caption("Who sends messages that get a quick reply vs go unanswered")
+                to_rows = [{"Person": s, **v} for s, v in topic_own.items()]
+                to_df = pd.DataFrame(to_rows)
+                fig_to = px.bar(to_df, x="Person", y="traction_rate_pct",
+                                title="% of messages that get replied to within 5 min",
+                                labels={"traction_rate_pct": "Traction rate %"}, height=260)
+                fig_to.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+                st.plotly_chart(fig_to, use_container_width=True)
+
+            if subgroups and len(subgroups) > 1:
+                st.subheader("Subgroups detected")
+                for i, sg in enumerate(subgroups):
+                    label = "Tight cluster" if len(sg) > 1 else "Peripheral"
+                    st.markdown(f"**{label}**: {', '.join(sg)}")
+
         st.divider()
 
         st.subheader("Coaching report")
