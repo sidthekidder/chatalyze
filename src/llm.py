@@ -77,7 +77,15 @@ def _build_prompt(features: dict, messages: list[dict]) -> str:
 
 ---
 
-Your task is to produce a deep, honest analysis. Do not be generic. Reference specific moments and actual phrases from the messages above when making observations.
+Your task is to produce a deep, honest analysis. Do not be generic. Reference specific moments and actual phrases from the messages above.
+
+Rules for the coaching report:
+- Address each person by name with a heading (e.g. ## PersonName)
+- Be direct and specific — name the actual pattern, quote the actual message
+- "What to try" suggestions must be derived from THIS conversation, not generic advice
+- NEVER suggest "scheduled check-ins", "regular catch-ups", or any generic calendar-based advice unless the data specifically shows communication frequency as a problem
+- NEVER use therapy-speak like "create a safe space", "validate feelings", "set intentions"
+- Write like a sharp, perceptive friend who has read everything
 
 Respond in this exact format:
 
@@ -100,11 +108,16 @@ Respond in this exact format:
 </analysis>
 
 <report>
-Write the coaching report here. Address each person by name. Be direct — not harsh, but honest. Reference specific things they said. For each person, identify 1-2 patterns worth examining and give a concrete suggestion. Avoid therapy-speak. Write like a smart, perceptive friend who has read the whole conversation.
+## [First person's name]
+[Their patterns and suggestions]
+
+## [Second person's name]
+[Their patterns and suggestions]
 
 {group_report_hint}
 
-End with a short section called 'What to try' with 2-3 specific, actionable things.
+## What to try
+2-3 specific, actionable things derived from what you actually saw in this conversation. Not generic. Not scheduled check-ins.
 </report>"""
 
 
@@ -128,7 +141,10 @@ def _parse_response(text: str) -> dict:
     report_match = re.search(r"<report>(.*?)(?:</report>|$)", text, re.DOTALL)
     if report_match:
         report = report_match.group(1).strip()
-        report = re.sub(r"^\*\*[^*]+\*\*\s*\n?", "", report).strip()
+        # Strip only generic header lines like "**Coaching Report**" or "**Analysis**"
+        # but keep person name headings — only strip if it's the sole content of the first line
+        # and matches known generic titles
+        report = re.sub(r"^\*\*(Coaching Report|Personal Coaching Report|Analysis Report|Report)\*\*\s*\n?", "", report, flags=re.IGNORECASE).strip()
 
     # Fallback: if neither tag found, use full text as report
     if not report and not analysis:

@@ -39,9 +39,9 @@ The LLM receives extracted features alongside strategically sampled message chun
 
 You'll get a `.txt` file.
 
-**2. Get a free Gemini API key**
+**2. Get a free Groq API key**
 
-Go to [aistudio.google.com](https://aistudio.google.com) → API keys → Create API key. No credit card needed for the free tier.
+Go to [console.groq.com](https://console.groq.com) → API Keys → Create API Key. No credit card needed for the free tier (14,400 requests/day).
 
 **3. Run locally**
 
@@ -50,7 +50,7 @@ git clone https://github.com/sidthekidder/chatalyze
 cd chatalyze
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-echo "GEMINI_API_KEY=your_key_here" > .env
+echo "GROQ_API_KEY=your_key_here" > .env
 streamlit run app.py
 ```
 
@@ -75,8 +75,8 @@ Sampler  —  picks ~100 messages via temporal bucketing (5 equal time
             windows) + longest messages + signal keywords + anchors.
             Ensures the LLM sees the full arc, not just recent events.
         ↓
-Single Gemini call  —  stats bundle + sampled messages → structured
-                       analysis (JSON) + coaching narrative in one pass
+Single Groq call  —  stats bundle + sampled messages → structured
+                     analysis (JSON) + coaching narrative in one pass
         ↓
 Report  —  patterns, dynamics, coaching report, HTML download
 ```
@@ -114,7 +114,7 @@ Issues and PRs welcome. If you have a WhatsApp export format that fails to parse
 
 ## Privacy
 
-Your chat file is processed in memory on your machine and never sent anywhere. The Gemini API receives only a statistical feature bundle and ~100 sampled messages — not your full conversation history. If you want zero external calls, the architecture is designed to support local Ollama models as a drop-in replacement.
+Your chat file is processed in memory on your machine and never sent anywhere. The Groq API receives only a statistical feature bundle and ~100 sampled messages — not your full conversation history. If you want zero external calls, the architecture is designed to support local Ollama models as a drop-in replacement.
 
 ---
 

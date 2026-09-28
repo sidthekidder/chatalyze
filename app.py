@@ -209,6 +209,12 @@ if uploaded:
                 st.stop()
 
         st.session_state.analyzing = False
+        st.session_state.result = result
+        st.session_state.features = features
+
+    if "result" in st.session_state and "features" in st.session_state:
+        result = st.session_state.result
+        features = st.session_state.features
 
         st.success("Done")
         st.divider()
@@ -241,10 +247,12 @@ if uploaded:
 
         st.divider()
         html = _build_html_report(features, result)
+        senders_slug = "-".join(s.replace(" ", "_") for s in features.get("senders", []))[:60]
+        report_filename = f"chatalyze-{senders_slug}.html" if senders_slug else "chatalyze-report.html"
         st.download_button(
             label="Download report (HTML)",
             data=html,
-            file_name="chatalyze-report.html",
+            file_name=report_filename,
             mime="text/html",
         )
 
