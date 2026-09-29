@@ -287,7 +287,7 @@ def _language_accommodation(df: pd.DataFrame, senders: list) -> dict:
     # LSM asymmetry: per-exchange accommodation (Danescu-Niculescu-Mizil 2012)
     # Who mirrors the other more per reply = accommodates more = may signal status/investment
     text_df_sorted = text_df.sort_values("timestamp").reset_index(drop=True)
-    accomm_per_person: dict[str, list] = {s: [] for s in senders}
+    accomm_per_person = {s: [] for s in senders}
     for i in range(1, len(text_df_sorted)):
         curr = text_df_sorted.iloc[i]
         prev = text_df_sorted.iloc[i - 1]
