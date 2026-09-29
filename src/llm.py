@@ -63,6 +63,11 @@ def _build_prompt(features: dict, messages: list[dict]) -> str:
                 "questions_asked": features["per_person"][s]["questions_asked"],
                 "pronoun_ratios": features["per_person"][s]["pronoun_ratios"],
                 "distortion_signals": features["per_person"][s]["distortion_signals"],
+                "emotional_labor": features["per_person"][s].get("emotional_labor", {}),
+                "activity": {
+                    k: v for k, v in features.get("activity_patterns", {}).get(s, {}).items()
+                    if k != "hourly"
+                },
             }
             for s in senders
         },
@@ -109,6 +114,8 @@ Research-grounded notes for distortion assessment:
 - Do NOT flag mind-reading or emotional reasoning as confident findings — these are unreliable from text alone
 - you_your ratio in pronoun stats = confrontational framing (Gottman), not just accommodation
 - asymmetry_interpretation in language_accommodation reveals who defers to whom in this relationship
+- emotional_labor: comfort_given (checking in, empathizing) vs venting_messages (expressing distress) per person — imbalance reveals who supports vs who leans
+- If messages include non-English languages (Hindi, Urdu, etc.), computed signal counts will undercount for those portions — rely on what you directly read in the messages, not the stats, for those sections
 
 Respond in this exact format:
 

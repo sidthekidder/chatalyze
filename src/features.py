@@ -31,6 +31,19 @@ COGNITIVE_WORDS = {
     "learned", "discovered", "recognize", "noticed",
 }
 
+COMFORT_PHRASES = [
+    "are you okay", "you okay", "how are you", "that sounds hard", "that must be",
+    "i'm sorry to hear", "must be tough", "i'm here", "here for you",
+    "you alright", "how are you feeling", "you doing okay", "tell me what happened",
+    "that makes sense", "i understand how", "must be difficult",
+]
+VENTING_PHRASES = [
+    "i can't deal", "i'm so stressed", "so exhausted", "so tired of",
+    "i hate this", "this is too much", "i can't take", "overwhelmed",
+    "i'm done", "can't anymore", "so frustrated", "nothing works",
+    "i give up", "i'm breaking", "everything is wrong",
+]
+
 CONFLICT_EXTRA = {"wtf", "seriously", "unbelievable", "ridiculous", "whatever", "fine", "stop it",
                   "leave me", "forget it", "never mind", "omg", "shut up", "enough"}
 POSITIVE_WORDS = {"love", "great", "amazing", "good", "happy", "excited", "thanks", "thank",
@@ -63,6 +76,7 @@ def extract_all(df: pd.DataFrame, is_group: bool) -> dict:
         "dynamics": _dynamics(df, senders, is_group),
         "trajectory": _trajectory(df, senders),
         "conflict_events": _conflict_patterns(df, senders),
+        "activity_patterns": _activity_patterns(df, senders),
     }
     if not is_group and len(senders) == 2:
         features["accommodation"] = _language_accommodation(df, senders)
@@ -110,6 +124,17 @@ def _person_features(df: pd.DataFrame, sender: str) -> dict:
 
     hour_dist = msgs["timestamp"].dt.hour.value_counts().sort_index().to_dict()
 
+    emotional_labor = {
+        "comfort_given": sum(
+            1 for msg in text_msgs["text"].str.lower()
+            if any(phrase in msg for phrase in COMFORT_PHRASES)
+        ),
+        "venting_messages": sum(
+            1 for msg in text_msgs["text"].str.lower()
+            if any(phrase in msg for phrase in VENTING_PHRASES)
+        ),
+    }
+
     return {
         "message_count": len(msgs),
         "media_count": int(msgs["is_media"].sum()),
@@ -121,6 +146,7 @@ def _person_features(df: pd.DataFrame, sender: str) -> dict:
             for k, v in pronoun_counts.items()
         },
         "distortion_signals": distortions,
+        "emotional_labor": emotional_labor,
         "top_emojis": _top_emojis(emojis_used),
         "active_hours": hour_dist,
         "questions_asked": sum(1 for t in text_msgs["text"] if "?" in t),
@@ -517,6 +543,39 @@ def _conflict_patterns(df: pd.DataFrame, senders: list) -> list:
             processed_until = window_end
 
     return events
+
+
+def _activity_patterns(df: pd.DataFrame, senders: list) -> dict:
+    """Per-person message timing: peak hour, night owl %, weekend %, activity label."""
+    result = {}
+    for s in senders:
+        msgs = df[df["sender"] == s]
+        if len(msgs) == 0:
+            continue
+        hours = msgs["timestamp"].dt.hour
+        total = len(msgs)
+        hour_counts = hours.value_counts().sort_index()
+        peak_hour = int(hour_counts.idxmax())
+        night_pct = round(sum(1 for h in hours if h >= 23 or h < 4) / total * 100, 1)
+        morning_pct = round(sum(1 for h in hours if 5 <= h < 9) / total * 100, 1)
+        weekend_pct = round(sum(1 for d in msgs["timestamp"].dt.dayofweek if d >= 5) / total * 100, 1)
+
+        if night_pct > 20:
+            label = "night owl"
+        elif morning_pct > 20:
+            label = "early bird"
+        else:
+            label = "daytime"
+
+        result[s] = {
+            "peak_hour": peak_hour,
+            "night_pct": night_pct,
+            "morning_pct": morning_pct,
+            "weekend_pct": weekend_pct,
+            "activity_label": label,
+            "hourly": {int(h): int(c) for h, c in hour_counts.items()},
+        }
+    return result
 
 
 def _top_emojis(emojis: list, n: int = 5) -> list:

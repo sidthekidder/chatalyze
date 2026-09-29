@@ -184,9 +184,8 @@ def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> N
         st.subheader("Distortion profile")
         DISTORTION_LABELS = {
             "catastrophizing": "Catastrophizing",
-            "mind_reading": "Mind-reading",
             "black_white_thinking": "Black & white thinking",
-            "emotional_reasoning": "Emotional reasoning",
+            "personalization": "Personalization",
         }
         dp_cols = st.columns(len(distortion_profile))
         for i, (person, profile) in enumerate(distortion_profile.items()):
@@ -238,6 +237,56 @@ def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> N
                 f"Double-texts sent: **{dbl.get(s, 0)}×**  \n"
                 f"Started conversations: **{ini.get(s, 0)}×**"
             )
+
+    # --- Emotional labor ---
+    el_senders = [s for s in features["senders"]
+                  if features["per_person"].get(s, {}).get("emotional_labor")]
+    if el_senders:
+        st.subheader("Emotional labor")
+        el_cols = st.columns(len(el_senders))
+        labor_scores = {}
+        for i, s in enumerate(el_senders):
+            el = features["per_person"][s]["emotional_labor"]
+            comfort = el.get("comfort_given", 0)
+            venting = el.get("venting_messages", 0)
+            labor_scores[s] = comfort - venting
+            el_cols[i].markdown(f"**{s}**")
+            el_cols[i].markdown(
+                f"Comfort given: **{comfort}×**  \n"
+                f"Venting messages: **{venting}×**"
+            )
+        if len(el_senders) == 2:
+            s1, s2 = el_senders[0], el_senders[1]
+            if labor_scores[s1] > labor_scores[s2] + 2:
+                st.caption(f"{s1} carries more emotional labor — more check-ins and support relative to venting.")
+            elif labor_scores[s2] > labor_scores[s1] + 2:
+                st.caption(f"{s2} carries more emotional labor — more check-ins and support relative to venting.")
+
+    # --- Activity patterns ---
+    activity = features.get("activity_patterns", {})
+    if activity:
+        st.subheader("Activity patterns")
+        hours_data = []
+        for s, a in activity.items():
+            for h, count in a.get("hourly", {}).items():
+                hours_data.append({"Hour": h, "Messages": count, "Person": s})
+        if hours_data:
+            hours_df = pd.DataFrame(hours_data)
+            fig = px.bar(hours_df, x="Hour", y="Messages", color="Person",
+                         barmode="overlay", opacity=0.7,
+                         title="Message timing by hour of day", height=240)
+            fig.update_xaxes(
+                tickvals=[0, 3, 6, 9, 12, 15, 18, 21],
+                ticktext=["12am", "3am", "6am", "9am", "12pm", "3pm", "6pm", "9pm"],
+            )
+            fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", legend_title="")
+            st.plotly_chart(fig, width="stretch")
+        acols = st.columns(len(activity))
+        for i, (s, a) in enumerate(activity.items()):
+            peak = a["peak_hour"]
+            peak_label = f"{peak}:00" if peak < 12 else (f"12:00" if peak == 12 else f"{peak-12}:00 pm") if peak != 0 else "12:00 am"
+            acols[i].metric(s, a["activity_label"])
+            acols[i].caption(f"Peak: {peak_label}  ·  {a['night_pct']}% late night  ·  {a['weekend_pct']}% weekends")
 
     trajectory = features.get("trajectory", [])
     if len(trajectory) >= 3:
