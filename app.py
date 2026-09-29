@@ -228,12 +228,25 @@ def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> N
     patterns = result["analysis"].get("patterns", [])
     if patterns:
         st.subheader("Patterns identified")
+        pat_rows = []
         for p in patterns:
-            with st.expander(f"**{p.get('person', '?')}** — {p.get('type', '')}"):
-                if p.get("evidence"):
-                    st.markdown(f"> *\"{p['evidence']}\"*")
-                if p.get("significance"):
-                    st.markdown(p["significance"])
+            ev = p.get("evidence", "") or ""
+            sig = p.get("significance", "") or ""
+            pat_rows.append({
+                "Person": p.get("person", ""),
+                "Pattern": p.get("type", ""),
+                "Evidence": ev[:120] + "…" if len(ev) > 120 else ev,
+                "Why it matters": sig[:160] + "…" if len(sig) > 160 else sig,
+            })
+        st.dataframe(
+            pd.DataFrame(pat_rows),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Evidence": st.column_config.TextColumn(width="medium"),
+                "Why it matters": st.column_config.TextColumn(width="large"),
+            },
+        )
 
     dynamics = result["analysis"].get("dynamics", {})
     if dynamics:
@@ -289,26 +302,32 @@ def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> N
     # --- Emotional labor ---
     el_senders = [s for s in features["senders"]
                   if features["per_person"].get(s, {}).get("emotional_labor")]
-    if el_senders:
+    labor_scores = {}
+    el_total_signal = 0
+    for s in el_senders:
+        el = features["per_person"][s].get("emotional_labor", {})
+        comfort = el.get("comfort_given", 0)
+        venting = el.get("venting_messages", 0)
+        labor_scores[s] = comfort - venting
+        el_total_signal += comfort + venting
+    if el_senders and el_total_signal > 0:
         st.subheader("Emotional labor")
-        el_cols = st.columns(len(el_senders))
-        labor_scores = {}
-        for i, s in enumerate(el_senders):
-            el = features["per_person"][s]["emotional_labor"]
-            comfort = el.get("comfort_given", 0)
-            venting = el.get("venting_messages", 0)
-            labor_scores[s] = comfort - venting
-            el_cols[i].markdown(f"**{s}**")
-            el_cols[i].markdown(
-                f"Comfort given: **{comfort}×**  \n"
-                f"Venting messages: **{venting}×**"
-            )
+        el_rows = []
+        for s in el_senders:
+            el = features["per_person"][s].get("emotional_labor", {})
+            el_rows.append({
+                "Person": s,
+                "Comfort given": el.get("comfort_given", 0),
+                "Venting messages": el.get("venting_messages", 0),
+                "Net score": labor_scores[s],
+            })
+        st.dataframe(pd.DataFrame(el_rows), use_container_width=True, hide_index=True)
         if len(el_senders) == 2:
             s1, s2 = el_senders[0], el_senders[1]
             if labor_scores[s1] > labor_scores[s2] + 2:
-                st.caption(f"{s1} carries more emotional labor — more check-ins and support relative to venting.")
+                st.caption(f"{s1} carries more emotional labor.")
             elif labor_scores[s2] > labor_scores[s1] + 2:
-                st.caption(f"{s2} carries more emotional labor — more check-ins and support relative to venting.")
+                st.caption(f"{s2} carries more emotional labor.")
 
     # --- Reply time trend ---
     rt_asym = features.get("dynamics", {}).get("reply_time_asymmetry")

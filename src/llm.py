@@ -51,8 +51,14 @@ def _build_prompt(features: dict, messages: list[dict]) -> str:
     group_roles_field = ',\n  "group_roles_observed": "<observations about who plays what role and how group energy flows>"' if is_group else ""
     group_report_hint = "For the group, also describe the group dynamic — who drives energy, who gets ignored, whether the group is functioning well." if is_group else ""
     conciseness_hint = (
-        f"\nIMPORTANT: This group has {n_senders} members. Keep each person's section to 2–3 short paragraphs max. Be direct and cut anything generic."
-        if n_senders > 3 else ""
+        f"\nIMPORTANT: This group has {n_senders} members. "
+        f"Each person's coaching section must be under 80 words — no exceptions. "
+        f"Include at most 5 patterns total across all people in the analysis JSON. "
+        f"The entire <report> block must be under 400 words. Cut anything generic."
+        if n_senders > 3 else (
+        "\nIMPORTANT: Keep each person's section under 150 words. The entire <report> must be under 600 words."
+        if n_senders > 2 else ""
+        )
     )
 
     messages_text = "\n".join(
