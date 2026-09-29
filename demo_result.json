@@ -1,0 +1,48 @@
+{
+  "analysis": {
+    "patterns": [
+      {
+        "person": "Arjun",
+        "type": "catastrophizing under pressure",
+        "evidence": "\"it's a disaster. nothing is working\" / \"I'm going to ruin my reputation\" / \"this is hopeless. I don't think I can pull this off\"",
+        "significance": "When Arjun hits a hard moment at work, his framing collapses into total failure language before he's gathered evidence. Three separate catastrophizing statements appear in 5 days during November — all of which turned out to be unfounded. The presentation he was convinced would ruin him went well. He acknowledged this himself in December: \"I spent most of November convinced everything was ruined. And none of it was actually ruined.\""
+      },
+      {
+        "person": "Priya",
+        "type": "skilled emotional support with a redirecting style",
+        "evidence": "\"okay let's slow down — which part is actually in your control right now?\" / \"start there. you've solved worse data problems\" / \"she's seeing potential in you not criticizing you\"",
+        "significance": "Priya doesn't just validate — she reframes. Her support moves Arjun from helplessness toward action without dismissing what he's feeling. This is a more sophisticated pattern than reassurance: she consistently asks the question that breaks the spiral rather than just saying it'll be okay."
+      },
+      {
+        "person": "Arjun",
+        "type": "avoidance when overwhelmed",
+        "evidence": "Oct 28: \"kinda spiraling honestly\" → Priya: \"want to talk?\" → Arjun: \"nah it's late. tomorrow\" — he then didn't bring it up the next day. Priya had to follow up.",
+        "significance": "Arjun opens the door to vulnerability and then closes it. He signals distress but deflects when offered the space to actually engage with it. This happened more than once. The pattern is: surface the problem, avoid going deeper, let Priya chase the thread."
+      },
+      {
+        "person": "Priya",
+        "type": "minimizing her own difficulties",
+        "evidence": "When her family situation got difficult in November: \"family stuff. a bit overwhelmed honestly\" → \"nothing I can really control\" — she describes a stressful period in about four messages, pivots back to checking on Arjun.",
+        "significance": "Priya is far more comfortable supporting than being supported. When her hard week arrived, she underplayed it quickly and deflected. Arjun did check in — he asked if she wanted to talk, he followed up the next day — but she kept it brief. There's something here worth examining: whether Priya has decided her problems are less important, or less safe to share in full."
+      }
+    ],
+    "dynamics": {
+      "power_balance": "Arjun sets the pace. He initiates most conversations, and the emotional arc of the chat tracks his stress levels more than Priya's. When Priya had her own difficult period in November, it occupied about 8 messages before the conversation shifted back to checking on Arjun. The relationship doesn't feel asymmetric in warmth — both are clearly invested — but asymmetric in whose emotional state drives the texture of the conversation.",
+      "emotional_labor": "Priya carries the larger share of emotional labor. She checks in when Arjun goes quiet, reframes his catastrophizing, asks the clarifying questions that break his spirals, and celebrates his wins with genuine enthusiasm. Arjun is warm and reciprocates — he checked in during Priya's November stretch — but he does so reactively. He supports when it's surfaced for him; Priya supports proactively.",
+      "trajectory": "Clear arc across 75 days: warm and exploratory in October, high-stress in early November as Arjun's project collapsed and he catastrophized consistently, then a recovery after the Nov 7 presentation, and noticeably warmer and more reflective by December. The relationship deepened through the difficult period rather than straining under it — the December messages have a different quality, more reflective and mutually appreciative."
+    },
+    "distortion_profile": {
+      "Arjun": {
+        "catastrophizing": {"severity": 4, "example": "\"I'm going to ruin my reputation\" — said about a project that ultimately went well and earned positive feedback from his manager"},
+        "black_white_thinking": {"severity": 2, "example": "\"everything. the data is wrong, the team isn't aligned\" — framing a multi-variable problem as total failure when the data issue was fixed within 2 days"},
+        "personalization": {"severity": 1, "example": "\"I should never have agreed to this\" — framing a challenging project as a personal mistake before it had concluded"}
+      },
+      "Priya": {
+        "catastrophizing": {"severity": 1, "example": null},
+        "black_white_thinking": {"severity": 1, "example": null},
+        "personalization": {"severity": 2, "example": "\"nothing I can really control\" — may be a deflection rather than a genuine assessment; she's reframing her family situation as outside her agency rather than engaging with it"}
+      }
+    }
+  },
+  "report": "## Arjun\n\nYou catastrophize under pressure — and you know it, which helps. By December you'd clocked the pattern yourself: *\"I spent most of November convinced everything was ruined. And none of it was actually ruined.\"* That self-awareness is real. The problem is it arrives after the fact, once the evidence is already in. In the moment, the spiral is total: *nothing works*, *it's a disaster*, *I'm going to ruin my reputation*.\n\nYou also have a consistent pattern of opening the door to vulnerability and not walking through it. Oct 28: \"kinda spiraling honestly\" at 10pm — Priya asked if you wanted to talk — \"nah it's late. tomorrow.\" You flagged the distress but stepped back when offered the space. Priya followed up the next morning. This happened more than once. It puts her in a position of having to chase the thread you left open.\n\n**What to try:** When you notice catastrophic language in your own messages — *nothing*, *everything*, *disaster*, *ruined* — treat it as a signal rather than a description. Ask: what's actually true right now versus what fear-of-tomorrow is making you say? \"This might be harder than I expected\" and \"this is a disaster\" produce different next moves.\n\n## Priya\n\nYou are exceptionally good at this. \"Which part is actually in your control right now?\" is a genuinely skilled question — it redirects without dismissing, breaks the spiral without minimizing. You do it naturally and consistently, and it works. Arjun recovered. The relationship got stronger through the hard stretch.\n\nThe pattern worth examining: you're much better at receiving Arjun's vulnerability than offering your own. When your family situation got difficult in November, you named it briefly and pivoted back. He did ask — twice, actually. You kept it short. There's a version of this where you've decided your problems are less important. Or less safe to share in full. Either way, you're doing most of the emotional lifting here, and you're doing it by keeping your own weight off the table.\n\n**What to try:** Next time something is hard for you, try staying with it for more than one exchange. Arjun showed up when you gave him a chance — he just needed you to hold the door open a little longer than \"I'm exhausted, maybe tomorrow.\"\n\n## What to try\n\n1. **Arjun: build a reality-check habit.** The next time you catch yourself writing *nothing is working* or *this is a disaster*, pause before sending. Ask whether the statement is literally true right now or whether it's your prediction of the worst-case version of tomorrow. These are different things, and you can tell them apart if you look.\n\n2. **Priya: let the support be mutual.** You reframe Arjun's spirals brilliantly. When your own hard weeks arrive, give him the chance to do that for you. The asymmetry here isn't because he's unwilling — he checked in, he followed up — it's because you kept it brief. Try not keeping it brief."
+}

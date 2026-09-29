@@ -503,8 +503,116 @@ def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> N
             else:
                 st.warning("Sharing requires UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN to be set.")
 
+        st.divider()
+        st.subheader("Share card")
+        st.caption("Screenshot this and share it — shows the key signals at a glance.")
+        _render_share_card(features, result)
+
     with st.expander("Raw statistics"):
         st.json(features)
+
+
+def _load_demo() -> None:
+    """Parse demo chat and load pre-written result into session state."""
+    _root = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(_root, "demo_chat.txt"), encoding="utf-8") as f:
+        raw = f.read()
+    messages, is_group = parse(raw)
+    df = to_dataframe(messages)
+    features = extract_all(df, is_group)
+    with open(os.path.join(_root, "demo_result.json"), encoding="utf-8") as f:
+        result = json.load(f)
+    st.session_state["result"] = result
+    st.session_state["features"] = features
+    st.session_state["is_demo"] = True
+
+
+def _render_share_card(features: dict, result: dict) -> None:
+    senders = features["senders"]
+    total = features["total_messages"]
+    days = features["date_range"]["days"]
+    share = features["dynamics"]["message_share_pct"]
+    colors = ["#6C63FF", "#FF6B9D", "#43C59E", "#FFA544"]
+
+    bar_segs = ""
+    legend = ""
+    for i, s in enumerate(senders[:4]):
+        pct = share.get(s, 0)
+        c = colors[i % len(colors)]
+        bar_segs += (
+            f'<div style="flex:{max(pct,1)};background:{c};height:10px;'
+            f'border-radius:5px;margin:0 1px" title="{s}: {pct:.0f}%"></div>'
+        )
+        legend += (
+            f'<span style="font-size:0.73rem;color:#555;margin-right:12px">'
+            f'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;'
+            f'background:{c};margin-right:3px;vertical-align:middle"></span>'
+            f'{s} {pct:.0f}%</span>'
+        )
+
+    patterns = result["analysis"].get("patterns", [])
+    top_insight = (patterns[0]["significance"][:140] + "…") if patterns else ""
+
+    traj_raw = result["analysis"].get("dynamics", {}).get("trajectory", "")
+    traj = (traj_raw[:110] + "…") if len(traj_raw) > 110 else traj_raw
+
+    dist = result["analysis"].get("distortion_profile", {})
+    dist_note = ""
+    for name, d in dist.items():
+        sev = d.get("catastrophizing", {}).get("severity", 0)
+        if sev >= 3:
+            dist_note = f"{name}: catastrophizing detected (severity {sev}/5)"
+            break
+
+    names = " & ".join(senders[:2])
+    start = features["date_range"].get("start", "")[:7]
+
+    insight_block = (
+        f'<div style="background:white;border-radius:10px;padding:12px 14px;margin-bottom:10px;'
+        f'border-left:3px solid #6C63FF">'
+        f'<div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;color:#6C63FF;'
+        f'font-weight:600;margin-bottom:4px">Key pattern</div>'
+        f'<div style="font-size:0.82rem;color:#333;line-height:1.5">{top_insight}</div></div>'
+    ) if top_insight else ""
+
+    traj_block = (
+        f'<div style="background:white;border-radius:10px;padding:12px 14px;margin-bottom:10px;'
+        f'border-left:3px solid #FF6B9D">'
+        f'<div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;color:#FF6B9D;'
+        f'font-weight:600;margin-bottom:4px">Trajectory</div>'
+        f'<div style="font-size:0.82rem;color:#333;line-height:1.5">{traj}</div></div>'
+    ) if traj else ""
+
+    dist_block = (
+        f'<div style="background:white;border-radius:10px;padding:12px 14px;margin-bottom:10px;'
+        f'border-left:3px solid #FFA544">'
+        f'<div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;color:#FFA544;'
+        f'font-weight:600;margin-bottom:4px">Distortion signal</div>'
+        f'<div style="font-size:0.82rem;color:#333">{dist_note}</div></div>'
+    ) if dist_note else ""
+
+    card = f"""
+<div style="background:linear-gradient(135deg,#f5f4ff 0%,#fff0f6 100%);border-radius:18px;
+  padding:24px 24px 18px;max-width:520px;font-family:-apple-system,BlinkMacSystemFont,
+  'Segoe UI',sans-serif;border:1px solid #e5e0ff;margin:0 auto">
+  <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:1.5px;color:#6C63FF;
+    font-weight:600;margin-bottom:5px">Chatalyze · chat analysis</div>
+  <div style="font-size:1.3rem;font-weight:700;color:#1a1a1a;margin-bottom:2px">{names}</div>
+  <div style="font-size:0.8rem;color:#999;margin-bottom:18px">{days} days · {total:,} messages · {start}</div>
+  <div style="margin-bottom:14px">
+    <div style="font-size:0.68rem;color:#aaa;font-weight:600;text-transform:uppercase;
+      letter-spacing:1px;margin-bottom:5px">Message share</div>
+    <div style="display:flex;height:10px;border-radius:5px;overflow:hidden">{bar_segs}</div>
+    <div style="margin-top:6px">{legend}</div>
+  </div>
+  {insight_block}{traj_block}{dist_block}
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;
+    padding-top:12px;border-top:1px solid #ece8ff">
+    <div style="font-size:0.72rem;color:#bbb">chatalyzer.streamlit.app</div>
+    <div style="font-size:0.72rem;color:#bbb">📸 screenshot to share</div>
+  </div>
+</div>"""
+    st.markdown(card, unsafe_allow_html=True)
 
 
 # --- App ---
@@ -538,15 +646,45 @@ if _shared_id:
 
 st.divider()
 
-# --- Upload ---
-st.subheader("Upload your chat export")
-with st.expander("How to export from WhatsApp"):
-    st.markdown("""
-**Android**: Open chat → ⋮ menu → More → Export chat → Without media
-**iPhone**: Open chat → Contact/Group name → Export Chat → Without media
+# --- Demo mode ---
+if st.session_state.get("is_demo") and "result" in st.session_state:
+    st.info(
+        "📋 **Sample report** (Arjun & Priya, Oct–Dec 2025) — "
+        "Upload your own chat below to get personalized insights."
+    )
+    _render_analysis(st.session_state["result"], st.session_state["features"])
+    st.divider()
+    if st.button("↑ Analyze my own chat", type="secondary"):
+        for _k in ["result", "features", "is_demo", "analyzing"]:
+            st.session_state.pop(_k, None)
+        st.rerun()
+    st.stop()
 
-You'll get a `.txt` file. Upload that here.
+# --- Upload ---
+_demo_col, _ = st.columns([1, 3])
+if _demo_col.button("▶ See a sample report", type="secondary"):
+    with st.spinner("Loading sample…"):
+        _load_demo()
+    st.rerun()
+
+st.subheader("Upload your chat export")
+with st.expander("How to export from WhatsApp", expanded=False):
+    st.markdown("""
+**Android**
+1. Open the chat → tap ⋮ (three dots, top right)
+2. More → Export chat
+3. Without media
+4. Share or save the `.txt` file
+
+**iPhone**
+1. Open the chat → tap the contact / group name at the top
+2. Scroll down → Export Chat
+3. Without media
+4. Save to Files or share the `.txt` file
+
+The file is usually named something like `WhatsApp Chat with Alex.txt`.
     """)
+st.caption("🔒 Your messages are not stored. The raw chat is processed in memory to generate your report and discarded immediately after.")
 
 uploaded = st.file_uploader("Choose a .txt export file", type=["txt"])
 
