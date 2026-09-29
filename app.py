@@ -355,66 +355,6 @@ def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> N
             acols[i].metric(s, a["activity_label"])
             acols[i].caption(f"Peak: {peak_label}  ·  {a['night_pct']}% late night  ·  {a['weekend_pct']}% weekends")
 
-    trajectory = features.get("trajectory", [])
-    if len(trajectory) >= 3:
-        st.divider()
-        st.subheader("Conversation over time")
-        traj_senders = features["senders"]
-        share_data = {"Period": [b["label"] for b in trajectory]}
-        distortion_data = {"Period": [b["label"] for b in trajectory]}
-        for s in traj_senders:
-            share_data[s] = [b["per_person"].get(s, {}).get("message_share_pct", 0) for b in trajectory]
-            distortion_data[s] = [b["per_person"].get(s, {}).get("distortion_signals", 0) for b in trajectory]
-        share_df = pd.DataFrame(share_data).melt("Period", var_name="Person", value_name="Share %")
-        dist_df = pd.DataFrame(distortion_data).melt("Period", var_name="Person", value_name="Distortion signals")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            fig = px.line(share_df, x="Period", y="Share %", color="Person",
-                          title="Message share", markers=True, height=260)
-            fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", legend_title="")
-            st.plotly_chart(fig, width="stretch")
-        with col2:
-            fig = px.bar(dist_df, x="Period", y="Distortion signals", color="Person",
-                         title="Distortion signals", barmode="group", height=260)
-            fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", legend_title="")
-            st.plotly_chart(fig, width="stretch")
-        with col3:
-            sentiment_data = [{"Period": b["label"], "Sentiment": b.get("sentiment", 0.5)}
-                              for b in trajectory]
-            sent_df = pd.DataFrame(sentiment_data)
-            fig = px.line(sent_df, x="Period", y="Sentiment", markers=True,
-                          title="Tone over time", height=260,
-                          labels={"Sentiment": "Positive ↑ / Negative ↓"})
-            fig.update_yaxes(range=[0, 1])
-            fig.add_hline(y=0.5, line_dash="dot", line_color="gray", opacity=0.4)
-            fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
-            st.plotly_chart(fig, width="stretch")
-
-    seeker_arc = features.get("seeker_arc", {})
-    arc_rows = []
-    for s, data in seeker_arc.items():
-        for pt in data.get("arc", []):
-            arc_rows.append({"Period": pt["period"], "Person": s, "Neg density %": pt["neg_density"]})
-    if arc_rows:
-        arc_df = pd.DataFrame(arc_rows)
-        trends = {s: seeker_arc[s]["trend"] for s in seeker_arc}
-        improving = [s for s, t in trends.items() if t == "improving"]
-        worsening = [s for s, t in trends.items() if t == "worsening"]
-        arc_caption = ""
-        if improving:
-            arc_caption += f"{', '.join(improving)}: distress language improving. "
-        if worsening:
-            arc_caption += f"{', '.join(worsening)}: distress language rising."
-        col_arc, _ = st.columns([2, 1])
-        with col_arc:
-            fig = px.line(arc_df, x="Period", y="Neg density %", color="Person",
-                          markers=True, title="Emotional arc — distress language over time",
-                          height=220,
-                          category_orders={"Period": ["early", "mid", "recent"]})
-            fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", legend_title="")
-            st.plotly_chart(fig, width="stretch")
-        if arc_caption:
-            st.caption(arc_caption.strip())
 
     accommodation = features.get("accommodation")
     if accommodation:
