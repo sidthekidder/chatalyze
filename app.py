@@ -464,6 +464,14 @@ def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> N
 
     if not is_shared:
         st.divider()
+        st.subheader("Share card")
+        st.caption("Screenshot this and share it — shows the key signals at a glance.")
+        try:
+            _render_share_card(features, result)
+        except Exception:
+            pass
+
+        st.divider()
         if st.button("🔗 Share report", type="primary"):
             with st.spinner("Saving…"):
                 rid = save_report(result, features)
@@ -473,11 +481,6 @@ def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> N
                 st.code(share_url, language=None)
             else:
                 st.warning("Sharing requires UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN to be set.")
-
-        st.divider()
-        st.subheader("Share card")
-        st.caption("Screenshot this and share it — shows the key signals at a glance.")
-        _render_share_card(features, result)
 
     with st.expander("Raw statistics"):
         st.json(features)
@@ -500,7 +503,9 @@ def _load_demo() -> None:
 
 def _render_share_card(features: dict, result: dict) -> None:
     senders = features["senders"]
-    total = features["total_messages"]
+    total = features.get("total_messages", sum(
+        features["per_person"][s].get("message_count", 0) for s in senders
+    ))
     days = features["date_range"]["days"]
     share = features["dynamics"]["message_share_pct"]
     colors = ["#6C63FF", "#FF6B9D", "#43C59E", "#FFA544"]
