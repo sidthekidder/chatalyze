@@ -212,7 +212,8 @@ def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> N
                 st.markdown(f"**{person}**")
                 for key, label in DISTORTION_LABELS.items():
                     entry = profile.get(key, {})
-                    severity = entry.get("severity", 0) if isinstance(entry, dict) else 0
+                    severity = int(entry.get("severity") or 0) if isinstance(entry, dict) else 0
+                    severity = max(0, min(severity, 5))
                     example = entry.get("example") if isinstance(entry, dict) else None
                     if severity > 0:
                         bar = "█" * severity + "░" * (5 - severity)
