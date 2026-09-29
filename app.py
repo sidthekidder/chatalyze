@@ -210,6 +210,7 @@ def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> N
         for i, (person, profile) in enumerate(distortion_profile.items()):
             with dp_cols[i]:
                 st.markdown(f"**{person}**")
+                found_any = False
                 for key, label in DISTORTION_LABELS.items():
                     entry = profile.get(key, {})
                     severity = int(entry.get("severity") or 0) if isinstance(entry, dict) else 0
@@ -220,6 +221,9 @@ def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> N
                         st.markdown(f"`{bar}` {label}")
                         if example:
                             st.caption(f"> {example[:80]}")
+                        found_any = True
+                if not found_any:
+                    st.caption("None detected")
 
     patterns = result["analysis"].get("patterns", [])
     if patterns:
