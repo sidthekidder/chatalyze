@@ -19,6 +19,9 @@ def analyze(features: dict, sampled_messages: list[dict]) -> dict:
 
     client = Groq(api_key=api_key)
     prompt = _build_prompt(features, sampled_messages)
+    # More tokens for group chats (more people = longer report)
+    n_senders = len(features.get("senders", []))
+    max_tokens = min(3000 + max(0, n_senders - 2) * 800, 6000)
 
     for attempt in range(3):
         try:
@@ -26,9 +29,13 @@ def analyze(features: dict, sampled_messages: list[dict]) -> dict:
                 model="openai/gpt-oss-120b",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
-                max_tokens=3000,
+                max_tokens=max_tokens,
             )
-            return _parse_response(response.choices[0].message.content)
+            choice = response.choices[0]
+            result = _parse_response(choice.message.content)
+            if choice.finish_reason == "length":
+                result["truncated"] = True
+            return result
         except Exception as e:
             if "429" in str(e) and attempt < 2:
                 time.sleep(30 * (attempt + 1))
@@ -39,9 +46,14 @@ def analyze(features: dict, sampled_messages: list[dict]) -> dict:
 def _build_prompt(features: dict, messages: list[dict]) -> str:
     is_group = features["is_group"]
     senders = features["senders"]
+    n_senders = len(senders)
     chat_type = "group chat" if is_group else "1:1 conversation"
     group_roles_field = ',\n  "group_roles_observed": "<observations about who plays what role and how group energy flows>"' if is_group else ""
     group_report_hint = "For the group, also describe the group dynamic — who drives energy, who gets ignored, whether the group is functioning well." if is_group else ""
+    conciseness_hint = (
+        f"\nIMPORTANT: This group has {n_senders} members. Keep each person's section to 2–3 short paragraphs max. Be direct and cut anything generic."
+        if n_senders > 3 else ""
+    )
 
     messages_text = "\n".join(
         f"[{m['time']}] {m['sender']}: {m['text']}"
@@ -105,7 +117,7 @@ def _build_prompt(features: dict, messages: list[dict]) -> str:
 
 ---
 
-Your task is to produce a deep, honest analysis. Do not be generic. Reference specific moments and actual phrases from the messages above.
+Your task is to produce a deep, honest analysis. Do not be generic. Reference specific moments and actual phrases from the messages above.{conciseness_hint}
 
 Rules for the coaching report:
 - Address each person by name with a heading (e.g. ## PersonName)

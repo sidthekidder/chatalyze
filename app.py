@@ -494,6 +494,13 @@ def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> N
 
     st.divider()
     st.subheader("Coaching report")
+    if result.get("truncated"):
+        st.warning(
+            "The report was cut off because this group chat has many members. "
+            "The analysis above is complete — only the coaching narrative may be truncated. "
+            "Re-running the analysis will often produce a full result.",
+            icon="⚠️",
+        )
     st.markdown(result["report"])
 
     if not is_shared:
