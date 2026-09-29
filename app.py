@@ -238,6 +238,30 @@ def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> N
                 f"Started conversations: **{ini.get(s, 0)}×**"
             )
 
+    # --- Emoji profile ---
+    ep_senders = [s for s in features["senders"]
+                  if features["per_person"].get(s, {}).get("emoji_profile", {}).get("total", 0) > 0]
+    if ep_senders:
+        st.subheader("Emoji register")
+        ep_cols = st.columns(len(ep_senders))
+        for i, s in enumerate(ep_senders):
+            ep = features["per_person"][s]["emoji_profile"]
+            total = ep.get("total", 1)
+            ep_cols[i].markdown(f"**{s}**")
+            ep_cols[i].markdown(
+                f"❤️ Affective: **{ep.get('affective', 0)}** "
+                f"({round(ep.get('affective', 0) / total * 100)}%)  \n"
+                f"😭 Negative: **{ep.get('negative_expressive', 0)}** "
+                f"({round(ep.get('negative_expressive', 0) / total * 100)}%)  \n"
+                f"😅 Softening: **{ep.get('softening_hedging', 0)}** "
+                f"({round(ep.get('softening_hedging', 0) / total * 100)}%)  \n"
+                f"Emoji/word ratio: **{ep.get('emoji_to_word_ratio', 0):.3f}**"
+            )
+        accom = features.get("accommodation", {})
+        if accom.get("emoji_reciprocity") is not None:
+            st.caption(f"Emoji register alignment: **{accom['emoji_reciprocity']:.0%}** — "
+                       f"{'similar emoji tone' if accom['emoji_reciprocity'] > 0.6 else 'different emoji registers'}")
+
     # --- Emotional labor ---
     el_senders = [s for s in features["senders"]
                   if features["per_person"].get(s, {}).get("emotional_labor")]
@@ -261,6 +285,25 @@ def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> N
                 st.caption(f"{s1} carries more emotional labor — more check-ins and support relative to venting.")
             elif labor_scores[s2] > labor_scores[s1] + 2:
                 st.caption(f"{s2} carries more emotional labor — more check-ins and support relative to venting.")
+
+    # --- Reply time trend ---
+    rt_asym = features.get("dynamics", {}).get("reply_time_asymmetry")
+    if rt_asym:
+        st.caption(f"Reply speed: {rt_asym}")
+    rt_trend = features.get("rt_trend", [])
+    if len(rt_trend) == 3 and any(rt["median_rt"] for rt in rt_trend):
+        trend_rows = []
+        for pt in rt_trend:
+            for s, med in pt["median_rt"].items():
+                if med is not None:
+                    trend_rows.append({"Period": pt["period"], "Person": s, "Median reply (min)": med})
+        if trend_rows:
+            trend_df = pd.DataFrame(trend_rows)
+            fig = px.line(trend_df, x="Period", y="Median reply (min)", color="Person",
+                          markers=True, title="Reply speed trend (daytime)", height=220,
+                          category_orders={"Period": ["early", "mid", "recent"]})
+            fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", legend_title="")
+            st.plotly_chart(fig, width="stretch")
 
     # --- Activity patterns ---
     activity = features.get("activity_patterns", {})

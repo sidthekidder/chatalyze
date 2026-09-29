@@ -50,6 +50,28 @@ POSITIVE_WORDS = {"love", "great", "amazing", "good", "happy", "excited", "thank
                   "appreciate", "wonderful", "awesome", "perfect", "haha", "lol", "nice", "cool",
                   "fun", "enjoy", "glad", "yes", "sure", "brilliant", "miss", "proud"}
 
+FUTURE_WORDS = {
+    "will", "gonna", "going", "would", "could", "should",
+    "tomorrow", "soon", "later", "next", "eventually", "someday",
+    "hope", "plan", "promise", "try", "shall",
+}
+
+# Emoji buckets — variation selectors stripped before comparison
+EMOJI_AFFECTIVE = {
+    "❤", "🥰", "😊", "✨", "😍", "💕", "💖", "💗", "💓", "💞", "💝",
+    "🫶", "🤗", "😘", "🥺", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎",
+    "❣", "💟", "😻", "🌟", "⭐", "🥹",
+}
+EMOJI_NEGATIVE = {
+    "😭", "😤", "😡", "😢", "😠", "😩", "😫", "😟", "😔", "💔", "😞",
+    "😖", "😣", "😰", "😥", "😓", "😿", "😾", "🙁", "☹", "😒",
+    "😧", "😨", "🤬", "😱",
+}
+EMOJI_SOFTENING = {
+    "😅", "😬", "😂", "🙏", "🤭", "😆", "😁", "🤣", "😜", "😝",
+    "🤪", "🫠", "🙃", "😏", "🫢", "🤷",
+}
+
 FUNCTION_WORDS = sorted({
     "the", "a", "an", "and", "but", "or", "so", "if", "not", "no",
     "is", "are", "was", "were", "be", "been", "have", "has", "had",
@@ -77,6 +99,7 @@ def extract_all(df: pd.DataFrame, is_group: bool) -> dict:
         "trajectory": _trajectory(df, senders),
         "conflict_events": _conflict_patterns(df, senders),
         "activity_patterns": _activity_patterns(df, senders),
+        "rt_trend": _rt_trend(df, senders),
     }
     if not is_group and len(senders) == 2:
         features["accommodation"] = _language_accommodation(df, senders)
@@ -120,7 +143,12 @@ def _person_features(df: pd.DataFrame, sender: str) -> dict:
         ),
     }
 
-    emojis_used = [ch for ch in all_text if ch in emoji.EMOJI_DATA]
+    # Use emoji_list for proper multi-codepoint extraction
+    emojis_used = [e["emoji"] for e in emoji.emoji_list(all_text)]
+    emoji_prof = _emoji_profile(emojis_used)
+    emoji_prof["emoji_to_word_ratio"] = round(len(emojis_used) / max(word_count, 1), 4)
+
+    future_focus = sum(1 for w in words if w.strip(".,!?") in FUTURE_WORDS)
 
     hour_dist = msgs["timestamp"].dt.hour.value_counts().sort_index().to_dict()
 
@@ -147,6 +175,8 @@ def _person_features(df: pd.DataFrame, sender: str) -> dict:
         },
         "distortion_signals": distortions,
         "emotional_labor": emotional_labor,
+        "future_focus": future_focus,
+        "emoji_profile": emoji_prof,
         "top_emojis": _top_emojis(emojis_used),
         "active_hours": hour_dist,
         "questions_asked": sum(1 for t in text_msgs["text"] if "?" in t),
@@ -159,7 +189,8 @@ def _dynamics(df: pd.DataFrame, senders: list, is_group: bool) -> dict:
     initiations = defaultdict(int)
     double_texts = defaultdict(int)
     reply_times = defaultdict(list)
-    left_on_read = defaultdict(int)  # how many times this person was left on read
+    reply_times_daytime = defaultdict(list)  # 8am-10pm only (context-normalized)
+    left_on_read = defaultdict(int)
 
     SESSION_GAP = pd.Timedelta(hours=4)
     LEFT_ON_READ_GAP = pd.Timedelta(minutes=15)
@@ -188,6 +219,8 @@ def _dynamics(df: pd.DataFrame, senders: list, is_group: bool) -> dict:
             gap = (ts - prev_time).total_seconds() / 60  # minutes
             if gap < 24 * 60:  # ignore gaps > 24h (not a reply, new session)
                 reply_times[sender].append(gap)
+                if 8 <= prev_time.hour < 22:  # daytime-normalized: exclude night sends
+                    reply_times_daytime[sender].append(gap)
 
         prev_sender = sender
         prev_time = ts
@@ -196,13 +229,29 @@ def _dynamics(df: pd.DataFrame, senders: list, is_group: bool) -> dict:
     for sender, times in reply_times.items():
         if times:
             med = float(np.median(times))
+            daytime = reply_times_daytime.get(sender, [])
             reply_time_stats[sender] = {
                 "median_minutes": round(med, 1),
                 "mean_minutes": round(float(np.mean(times)), 1),
                 "fast_replies_pct": round(sum(1 for t in times if t < 5) / len(times) * 100, 1),
                 "variance_minutes": round(float(np.std(times)), 1),
                 "spike_count": sum(1 for t in times if t > max(med * 3, 60)),
+                "daytime_median_minutes": round(float(np.median(daytime)), 1) if daytime else None,
             }
+
+    # RT asymmetry: for 1:1 chats, who waits longer to reply to whom
+    rt_asymmetry = None
+    if len(senders) == 2 and all(s in reply_time_stats for s in senders):
+        s1, s2 = senders[0], senders[1]
+        m1 = reply_time_stats[s1]["median_minutes"]
+        m2 = reply_time_stats[s2]["median_minutes"]
+        if abs(m1 - m2) > 2:
+            slower = s1 if m1 > m2 else s2
+            faster = s2 if m1 > m2 else s1
+            ratio = round(max(m1, m2) / max(min(m1, m2), 0.1), 1)
+            rt_asymmetry = f"{slower} takes {ratio}× longer to reply than {faster} on average."
+        else:
+            rt_asymmetry = "Both reply at similar speeds."
 
     share = df["sender"].value_counts(normalize=True).mul(100).round(1).to_dict()
 
@@ -211,8 +260,58 @@ def _dynamics(df: pd.DataFrame, senders: list, is_group: bool) -> dict:
         "conversation_initiations": dict(initiations),
         "double_texts": dict(double_texts),
         "reply_time_stats": reply_time_stats,
+        "reply_time_asymmetry": rt_asymmetry,
         "left_on_read": dict(left_on_read),
     }
+
+
+def _emoji_profile(emojis: list) -> dict:
+    """Classify extracted emoji into affective, negative-expressive, softening buckets."""
+    normed = [e.replace('️', '').replace('︎', '') for e in emojis]
+    affective = sum(1 for e in normed if e in EMOJI_AFFECTIVE)
+    negative = sum(1 for e in normed if e in EMOJI_NEGATIVE)
+    softening = sum(1 for e in normed if e in EMOJI_SOFTENING)
+    total = len(normed)
+    return {
+        "total": total,
+        "affective": affective,
+        "negative_expressive": negative,
+        "softening_hedging": softening,
+    }
+
+
+def _rt_trend(df: pd.DataFrame, senders: list) -> list:
+    """Reply time trend across early / mid / recent thirds of the conversation."""
+    df = df.sort_values("timestamp").reset_index(drop=True)
+    n = len(df)
+    thirds = [
+        ("early", df.iloc[:n // 3]),
+        ("mid", df.iloc[n // 3: 2 * n // 3]),
+        ("recent", df.iloc[2 * n // 3:]),
+    ]
+    result = []
+    for label, chunk in thirds:
+        chunk = chunk.reset_index(drop=True)
+        rt_per_sender = defaultdict(list)
+        prev_sender = None
+        prev_time = None
+        for _, row in chunk.iterrows():
+            sender = row["sender"]
+            ts = row["timestamp"]
+            if prev_sender and sender != prev_sender and prev_time:
+                gap = (ts - prev_time).total_seconds() / 60
+                if gap < 24 * 60 and 8 <= prev_time.hour < 22:
+                    rt_per_sender[sender].append(gap)
+            prev_sender = sender
+            prev_time = ts
+        result.append({
+            "period": label,
+            "median_rt": {
+                s: round(float(np.median(v)), 1) if v else None
+                for s, v in rt_per_sender.items()
+            },
+        })
+    return result
 
 
 def _period_label(p: pd.Period) -> str:
@@ -338,12 +437,30 @@ def _language_accommodation(df: pd.DataFrame, senders: list) -> dict:
         highest = max(asymmetry, key=asymmetry.get) if asymmetry else ""
         asym_interp = f"{highest} shows the highest language mirroring in the group." if highest else ""
 
+    # Emoji register reciprocity: do partners use similar emoji valence profiles?
+    def _emoji_vec(text):
+        emojis = [e["emoji"] for e in emoji.emoji_list(text)]
+        if not emojis:
+            return np.zeros(3)
+        total = len(emojis)
+        normed = [e.replace('️', '') for e in emojis]
+        return np.array([
+            sum(1 for e in normed if e in EMOJI_AFFECTIVE) / total,
+            sum(1 for e in normed if e in EMOJI_NEGATIVE) / total,
+            sum(1 for e in normed if e in EMOJI_SOFTENING) / total,
+        ], dtype=float)
+
+    ev1 = _emoji_vec(texts[senders[0]])
+    ev2 = _emoji_vec(texts[senders[1]])
+    emoji_reciprocity = round(_cosine(ev1, ev2), 3) if (np.any(ev1) and np.any(ev2)) else None
+
     return {
         "overall_score": overall,
         "trend": trend,
         "interpretation": interp,
         "asymmetry": asymmetry,
         "asymmetry_interpretation": asym_interp,
+        "emoji_reciprocity": emoji_reciprocity,
     }
 
 
@@ -373,23 +490,31 @@ def _group_features(df: pd.DataFrame, senders: list) -> dict:
 
     reply_matrix = {s: dict(v) for s, v in reply_to.items()}
 
-    # role heuristics
+    # role heuristics (research-grounded: diversity + volume + initiation)
     roles = {}
+    reply_diversity = {}
     total = len(df)
     for s in senders:
         sent = len(df[df["sender"] == s])
         received_replies = sum(reply_matrix.get(r, {}).get(s, 0) for r in senders if r != s)
         sent_replies = sum(reply_to.get(s, {}).values())
+        unique_reply_targets = len(reply_to.get(s, {}))
         share = sent / total
+        # diversity: fraction of other members this person replies to
+        diversity = unique_reply_targets / max(len(senders) - 1, 1)
+        reply_diversity[s] = {
+            "unique_reply_targets": unique_reply_targets,
+            "diversity_score": round(diversity, 3),
+        }
 
         if share < 0.05:
             role = "lurker"
-        elif sent_replies / max(sent, 1) > 0.7:
-            role = "connector"
+        elif diversity > 0.6 and sent_replies / max(sent, 1) > 0.4:
+            role = "connector"  # replies to many unique people
         elif received_replies / max(sent, 1) > 0.5:
             role = "energizer"
-        elif share > 0.3:
-            role = "broadcaster"
+        elif share > 0.3 and diversity < 0.4:
+            role = "broadcaster"  # sends a lot but replies to few unique people
         else:
             role = "participant"
 
@@ -402,6 +527,7 @@ def _group_features(df: pd.DataFrame, senders: list) -> dict:
     return {
         "reply_network": reply_matrix,
         "participant_roles": roles,
+        "reply_diversity": reply_diversity,
         "ignored_messages_count": dict(ignored_count),
         "cohesion": cohesion,
         "topic_ownership": topic_own,

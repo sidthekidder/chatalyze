@@ -64,6 +64,12 @@ def _build_prompt(features: dict, messages: list[dict]) -> str:
                 "pronoun_ratios": features["per_person"][s]["pronoun_ratios"],
                 "distortion_signals": features["per_person"][s]["distortion_signals"],
                 "emotional_labor": features["per_person"][s].get("emotional_labor", {}),
+                "future_focus_count": features["per_person"][s].get("future_focus", 0),
+                "emoji_profile": {
+                    k: v for k, v in features["per_person"][s].get("emoji_profile", {}).items()
+                    if k != "emoji_to_word_ratio"
+                },
+                "emoji_to_word_ratio": features["per_person"][s].get("emoji_profile", {}).get("emoji_to_word_ratio", 0),
                 "activity": {
                     k: v for k, v in features.get("activity_patterns", {}).get(s, {}).items()
                     if k != "hourly"
@@ -79,7 +85,10 @@ def _build_prompt(features: dict, messages: list[dict]) -> str:
             "interpretation": features["accommodation"]["interpretation"],
             "asymmetry": features["accommodation"].get("asymmetry", {}),
             "asymmetry_interpretation": features["accommodation"].get("asymmetry_interpretation", ""),
+            "emoji_reciprocity": features["accommodation"].get("emoji_reciprocity"),
         }} if features.get("accommodation") else {}),
+        **({"reply_time_asymmetry": features["dynamics"].get("reply_time_asymmetry")} if features["dynamics"].get("reply_time_asymmetry") else {}),
+        **({"rt_trend": features.get("rt_trend")} if features.get("rt_trend") else {}),
         **({"trajectory_summary": {
             "first_period": features["trajectory"][0] if features.get("trajectory") else None,
             "last_period": features["trajectory"][-1] if features.get("trajectory") else None,
@@ -115,6 +124,11 @@ Research-grounded notes for distortion assessment:
 - you_your ratio in pronoun stats = confrontational framing (Gottman), not just accommodation
 - asymmetry_interpretation in language_accommodation reveals who defers to whom in this relationship
 - emotional_labor: comfort_given (checking in, empathizing) vs venting_messages (expressing distress) per person — imbalance reveals who supports vs who leans
+- emoji_profile: affective (❤️😊🥰) = warmth/agreeableness; negative_expressive (😭😡😢) = distress/frustration; softening_hedging (😅😬😂🙏) = pragmatic softeners — 😂 is primarily a hedging/distancing marker, NOT a happiness signal
+- future_focus_count: high count in a supporter is a validated signal of comforting behavior; seekers lean past-tense
+- rt_trend shows whether reply speeds are rising (cooling off) or falling (more engaged) across early/mid/recent conversation thirds
+- reply_time_asymmetry: directional RT difference directly encodes investment asymmetry
+- emoji_reciprocity: whether partners mirror each other's emoji valence register
 - If messages include non-English languages (Hindi, Urdu, etc.), computed signal counts will undercount for those portions — rely on what you directly read in the messages, not the stats, for those sections
 
 Respond in this exact format:
