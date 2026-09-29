@@ -100,11 +100,13 @@ def extract_all(df: pd.DataFrame, is_group: bool) -> dict:
         "conflict_events": _conflict_patterns(df, senders),
         "activity_patterns": _activity_patterns(df, senders),
         "rt_trend": _rt_trend(df, senders),
+        "seeker_arc": _seeker_arc(df, senders),
     }
     if not is_group and len(senders) == 2:
         features["accommodation"] = _language_accommodation(df, senders)
     if is_group:
         features["group"] = _group_features(df, senders)
+        features["group"]["temporal_roles"] = _temporal_roles(df, senders)
     return features
 
 
@@ -669,6 +671,60 @@ def _conflict_patterns(df: pd.DataFrame, senders: list) -> list:
             processed_until = window_end
 
     return events
+
+
+def _seeker_arc(df: pd.DataFrame, senders: list) -> dict:
+    """
+    Measures whether each person's negative word density decreases over the conversation.
+    Based on ESConv: successful support = seeker's distress language improves over the arc.
+    """
+    NEG_WORDS = CATASTROPHIZE_WORDS | CONFLICT_EXTRA
+    text_df = df[~df["is_media"]].sort_values("timestamp").reset_index(drop=True)
+    n = len(text_df)
+    thirds = [
+        ("early", text_df.iloc[:n // 3]),
+        ("mid", text_df.iloc[n // 3: 2 * n // 3]),
+        ("recent", text_df.iloc[2 * n // 3:]),
+    ]
+    result = {}
+    for s in senders:
+        arc = []
+        for label, chunk in thirds:
+            words = " ".join(chunk[chunk["sender"] == s]["text"].str.lower()).split()
+            if words:
+                neg = sum(1 for w in words if w.strip(".,!?") in NEG_WORDS) / len(words) * 100
+                arc.append({"period": label, "neg_density": round(neg, 3)})
+        if len(arc) >= 2:
+            trend = "improving" if arc[-1]["neg_density"] < arc[0]["neg_density"] else "worsening" if arc[-1]["neg_density"] > arc[0]["neg_density"] else "stable"
+        else:
+            trend = "stable"
+        result[s] = {"arc": arc, "trend": trend}
+    return result
+
+
+def _temporal_roles(df: pd.DataFrame, senders: list) -> dict:
+    """Compare each person's participation share in first half vs second half."""
+    df = df.sort_values("timestamp").reset_index(drop=True)
+    mid = len(df) // 2
+    early = df.iloc[:mid]
+    late = df.iloc[mid:]
+    result = {}
+    for s in senders:
+        early_share = len(early[early["sender"] == s]) / max(len(early), 1) * 100
+        late_share = len(late[late["sender"] == s]) / max(len(late), 1) * 100
+        delta = late_share - early_share
+        if delta > 5:
+            trend = "more active recently"
+        elif delta < -5:
+            trend = "less active recently"
+        else:
+            trend = "stable"
+        result[s] = {
+            "early_share_pct": round(early_share, 1),
+            "late_share_pct": round(late_share, 1),
+            "trend": trend,
+        }
+    return result
 
 
 def _activity_patterns(df: pd.DataFrame, senders: list) -> dict:

@@ -121,8 +121,27 @@ def _build_html_report(features: dict, result: dict) -> str:
 </html>"""
 
 
+_MOBILE_CSS = """
+<style>
+@media (max-width: 640px) {
+    div[data-testid="stHorizontalBlock"] { flex-wrap: wrap; }
+    div[data-testid="column"] {
+        flex: 1 1 100% !important;
+        min-width: 100% !important;
+        width: 100% !important;
+    }
+    h1 { font-size: 1.4rem !important; }
+    h2 { font-size: 1.1rem !important; }
+    .stMetric { padding: 6px 0 !important; }
+    .stPlotlyChart { overflow-x: auto; }
+}
+</style>
+"""
+
+
 def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> None:
     import plotly.express as px
+    st.markdown(_MOBILE_CSS, unsafe_allow_html=True)
 
     # --- Hero header ---
     senders = features["senders"]
@@ -366,6 +385,32 @@ def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> N
             fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
             st.plotly_chart(fig, width="stretch")
 
+    seeker_arc = features.get("seeker_arc", {})
+    arc_rows = []
+    for s, data in seeker_arc.items():
+        for pt in data.get("arc", []):
+            arc_rows.append({"Period": pt["period"], "Person": s, "Neg density %": pt["neg_density"]})
+    if arc_rows:
+        arc_df = pd.DataFrame(arc_rows)
+        trends = {s: seeker_arc[s]["trend"] for s in seeker_arc}
+        improving = [s for s, t in trends.items() if t == "improving"]
+        worsening = [s for s, t in trends.items() if t == "worsening"]
+        arc_caption = ""
+        if improving:
+            arc_caption += f"{', '.join(improving)}: distress language improving. "
+        if worsening:
+            arc_caption += f"{', '.join(worsening)}: distress language rising."
+        col_arc, _ = st.columns([2, 1])
+        with col_arc:
+            fig = px.line(arc_df, x="Period", y="Neg density %", color="Person",
+                          markers=True, title="Emotional arc — distress language over time",
+                          height=220,
+                          category_orders={"Period": ["early", "mid", "recent"]})
+            fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", legend_title="")
+            st.plotly_chart(fig, width="stretch")
+        if arc_caption:
+            st.caption(arc_caption.strip())
+
     accommodation = features.get("accommodation")
     if accommodation:
         st.divider()
@@ -390,27 +435,54 @@ def _render_analysis(result: dict, features: dict, is_shared: bool = False) -> N
         cohesion = group_data.get("cohesion", {})
         topic_own = group_data.get("topic_ownership", {})
         subgroups = group_data.get("subgroups", [])
+        temporal_roles = group_data.get("temporal_roles", {})
+        roles = group_data.get("participant_roles", {})
+        reply_div = group_data.get("reply_diversity", {})
+
+        st.divider()
+        st.subheader("Group health")
         if cohesion:
-            st.divider()
-            st.subheader("Group health")
             gc1, gc2, gc3 = st.columns(3)
-            gc1.metric("Cohesion score", f"{cohesion['overall_cohesion']:.0%}")
+            gc1.metric("Cohesion", f"{cohesion['overall_cohesion']:.0%}")
             gc2.metric("Participation balance", f"{cohesion['participation_balance']:.0%}",
                        help="How evenly messages are distributed across members")
             gc3.metric("Reply ratio", f"{cohesion['reply_ratio']:.0%}",
                        help="Fraction of messages that get a quick reply")
             st.caption(cohesion["interpretation"])
+
+        # Roles table
+        if roles:
+            st.subheader("Member roles")
+            role_rows = []
+            for s in features["senders"]:
+                p = features["per_person"].get(s, {})
+                to = topic_own.get(s, {})
+                tr = temporal_roles.get(s, {})
+                rd = reply_div.get(s, {})
+                role_rows.append({
+                    "Member": s,
+                    "Role": roles.get(s, "—"),
+                    "Messages": p.get("message_count", 0),
+                    "Share %": features["dynamics"]["message_share_pct"].get(s, 0),
+                    "Reply diversity": f"{rd.get('diversity_score', 0):.0%}",
+                    "Traction rate": f"{to.get('traction_rate_pct', 0):.0f}%",
+                    "Participation trend": tr.get("trend", "—"),
+                })
+            st.dataframe(
+                pd.DataFrame(role_rows).set_index("Member"),
+                use_container_width=True,
+            )
+
         if topic_own:
-            st.subheader("Topic ownership")
-            st.caption("Who sends messages that get a quick reply vs go unanswered")
             to_df = pd.DataFrame([{"Person": s, **v} for s, v in topic_own.items()])
             fig = px.bar(to_df, x="Person", y="traction_rate_pct",
-                         title="% of messages replied to within 5 min",
-                         labels={"traction_rate_pct": "Traction rate %"}, height=260)
+                         title="Topic traction — % of messages replied to within 5 min",
+                         labels={"traction_rate_pct": "Traction %"}, height=240)
             fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
             st.plotly_chart(fig, width="stretch")
+
         if subgroups and len(subgroups) > 1:
-            st.subheader("Subgroups detected")
+            st.subheader("Subgroups")
             for sg in subgroups:
                 label = "Tight cluster" if len(sg) > 1 else "Peripheral"
                 st.markdown(f"**{label}**: {', '.join(sg)}")

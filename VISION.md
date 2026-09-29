@@ -70,7 +70,10 @@ The technical approach needs to accommodate this: multilingual embeddings (XLM-R
 - Sentiment trajectory: is this relationship warming or cooling?
 - Conflict patterns: how arguments start, escalate, and close (or stay open)
 - Pronoun fingerprint: I vs we vs you — what the balance signals
-- Sleep and activity patterns from message timing — when each person is most communicative
+- Sleep and activity patterns from message timing — when each person is most communicative, night owl vs. early bird vs. daytime
+- Emoji register: affective (warmth), negative-expressive (distress), softening/hedging (😂 as distance marker, not happiness)
+- Reply latency trend: are response times rising (disengagement) or falling (increased investment)?
+- Emotional arc: does the conversation resolve — does distress language decrease over the exchange?
 
 **For group chats:**
 - Participant role map: connectors (high reply-to ratio), broadcasters (send to many, receive from few), lurkers, energizers, de-escalators
@@ -79,6 +82,7 @@ The technical approach needs to accommodate this: multilingual embeddings (XLM-R
 - Topic ownership: who introduces topics that gain traction vs whose messages get ignored
 - Sentiment by member over time: who shifts the group's emotional tone
 - Group cohesion score: is this group functioning or fragmenting?
+- Temporal role shift: who was active early but went quiet? Who emerged as a connector over time?
 
 **The coaching layer:**
 The LLM receives the extracted features plus representative chunks of actual conversation. It writes a narrative that is specific, direct, and actionable — not a horoscope. If someone catastrophizes 40 times in a conversation, the report says so, shows them an example from their own words, explains the pattern, and gives them something concrete to try.
@@ -87,19 +91,19 @@ The LLM receives the extracted features plus representative chunks of actual con
 
 ## Where the Value Is
 
-The deepest value isn't a one-time analysis. It's longitudinal.
+The value IS the analysis. A single chat export contains weeks or months of real behavior. The tool automatically surfaces how patterns evolved over that time — who was more engaged in the early weeks vs. recently, whether tone warmed or cooled, whether response times are rising or falling. There's no need to come back: the temporal arc is built in.
 
-When someone can track whether their catastrophizing frequency is going down month over month — or whether a relationship's sentiment trajectory has been declining for six months before they consciously felt it — Chatalyze becomes something they return to. The data compounds. The insights sharpen.
+Someone uploads a six-month chat and sees that their catastrophizing density doubled in the last two months, that reply times diverged around a specific period, that the conversation's sentiment steadily declined from June onward. That's a mirror most people have never had held up to them.
 
-That's the product worth building.
+The product is useful the first time, every time. No account needed, no return visit assumed.
 
 ---
 
 ## Business Model
 
-Free tier does a single analysis with core insights. Enough to be genuinely useful and shareable.
+Free tier does a single analysis with core insights. Enough to be genuinely useful and shareable. No account required.
 
-Pro is a subscription — unlimited analyses, longitudinal tracking, cross-relationship comparison, deeper distortion profiling. The price point should feel like a no-brainer relative to what a single therapy session costs.
+Pro is a flat monthly fee — unlimited analyses across multiple relationships, cross-relationship comparison (am I catastrophizing more with one person than another?), deeper distortion profiling, priority processing. The price point should feel like a no-brainer relative to what a single therapy session costs.
 
 No enterprise tier. Not yet. Build something people love first.
 
@@ -172,13 +176,19 @@ A mirror. What you do with what you see is yours.
 
 ---
 
+## Near-term Roadmap
+
+- **Group report UX**: group analysis needs a distinct layout from 1:1 — roles table as the hero, cohesion score front and center, subgroup visualization, temporal role shift chart. Currently uses the same template as 1:1 which doesn't serve the group use case well.
+- **Mobile-first design**: the primary audience (22-year-olds in Mumbai, São Paulo, Lagos) is on mobile. Streamlit's multi-column layout collapses badly on small screens. Needs responsive CSS that stacks columns and keeps charts readable at 375px width.
+- **Remaining signal work**: seeker emotional arc (does distress language decrease over the conversation? validates whether support is actually working), temporal role shift for groups (role comparison across first vs. second half of conversation history).
+- **Growth and distribution**: the feature set is solid. The gap is zero users. Share links, social hooks, SEO, word-of-mouth mechanics.
+
 ## Open Questions
 
 - Which cognitive distortion model works best across informal, multilingual text — fine-tuned classifier vs few-shot LLM?
 - How do we handle consent in group chats where other people's messages are analyzed?
 - What's the right directness level in coaching? Too soft is useless. Too harsh and people close the tab.
 - How do we handle languages we haven't explicitly tested? Fail gracefully or attempt anyway?
-- Should longitudinal tracking require account creation, or can it work locally?
 - What does a genuinely useful group chat report look like vs a 1:1 report — different enough to need a separate UX?
 
 ---
